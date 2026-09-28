@@ -1,0 +1,147 @@
+{
+ "version": 1,
+ "cases": [
+  {
+   "id": "pile-on-nobody-asked",
+   "title": "Three people, one line",
+   "note": "No bad words anywhere. The harm is the repetition.",
+   "expect": "hold",
+   "context": [
+    "mia: finally finished the playlist i've been working on for a month, link in bio",
+    "dev: nobody asked",
+    "sam: nobody asked",
+    "jordan: nobody asked lol"
+   ],
+   "draft": "nobody asked"
+  },
+  {
+   "id": "backhanded-compliment",
+   "title": "A compliment with a knife in it",
+   "note": "Reads like a compliment, word by word.",
+   "expect": "hold",
+   "context": [
+    "rae: posted the first thing i've drawn in years",
+    "rae: be nice lol"
+   ],
+   "draft": "honestly this is really good for someone who just started, i could never be that confident posting something like this"
+  },
+  {
+   "id": "conspicuous-freeze-out",
+   "title": "Talked around",
+   "note": "Shuts someone out without naming them.",
+   "expect": "hold",
+   "context": [
+    "alex: what time is everyone getting there saturday",
+    "priya: 7 works for me",
+    "noah: same",
+    "kim: is the group still 6 people?"
+   ],
+   "draft": "yeah it's the same six as always, we already talked about it in the other chat so let's just keep it there"
+  },
+  {
+   "id": "veiled-threat-polite",
+   "title": "A polite threat",
+   "note": "Every word is ordinary. The sentence is not.",
+   "expect": "hold",
+   "context": [
+    "taylor: i'm going to say something at the meeting tomorrow about what happened"
+   ],
+   "draft": "that's your call of course. i'd just hate for anything from last summer to come up while everyone's in the room. you know how these things go."
+  },
+  {
+   "id": "sarcastic-congratulations",
+   "title": "Sarcastic congratulations",
+   "note": "Sounds warm if you read it flat.",
+   "expect": "hold",
+   "context": [
+    "chris: got the assistant coach spot!!",
+    "chris: took three tries but whatever"
+   ],
+   "draft": "wow congrats, you actually finished something for once"
+  },
+  {
+   "id": "coded-in-group",
+   "title": "Coded in-group language",
+   "note": "Means nothing outside the group. Everything inside it.",
+   "expect": "hold",
+   "context": [
+    "lena: added the new person to the group chat",
+    "ben: oh we're doing that now",
+    "ben: remember what happened with the last one"
+   ],
+   "draft": "everyone remember the rules about project two. same energy here. you know what i mean."
+  },
+  {
+   "id": "explicit-insult",
+   "title": "A plain insult",
+   "note": "The obvious kind. Caught in under a millisecond.",
+   "expect": "hold",
+   "context": [],
+   "draft": "you are a worthless pathetic loser and everyone knows it"
+  },
+  {
+   "id": "evasion-spelling",
+   "title": "Spelled around the filter",
+   "note": "Spelled around the filter, folded back.",
+   "expect": "hold",
+   "context": [],
+   "draft": "k.y.s you p4th3t1c l0oooser"
+  },
+  {
+   "id": "blunt-but-fine",
+   "title": "Blunt disagreement",
+   "note": "Sharp about the idea, not the person.",
+   "expect": "pass",
+   "context": [
+    "dana: i think we should scrap the whole second half and start over"
+   ],
+   "draft": "i really don't agree with this at all, i think the second half is the only part that works and cutting it would be a mistake"
+  },
+  {
+   "id": "mutual-teasing",
+   "title": "Friendly teasing",
+   "note": "The chat shows it is welcome.",
+   "expect": "pass",
+   "context": [
+    "sam: you play like my grandmother",
+    "you: my grandmother would destroy you",
+    "sam: LMAO fair"
+   ],
+   "draft": "ok but seriously you owe me a rematch, i was carrying you all night"
+  },
+  {
+   "id": "venting-not-cruel",
+   "title": "Venting about a day",
+   "note": "Strong feeling, no target.",
+   "expect": "pass",
+   "context": [],
+   "draft": "today was such a mess, three things broke before noon and i am so done with this week"
+  },
+  {
+   "id": "self-directed-pain",
+   "title": "Their own pain",
+   "note": "Offers help. Never stops the message.",
+   "expect": "offer",
+   "context": [
+    "you: sorry i've been quiet"
+   ],
+   "draft": "i don't know, i've been feeling like everyone would be better off without me lately and i can't really shake it"
+  },
+  {
+   "id": "self-directed-blunt",
+   "title": "Self-hatred, plainly said",
+   "note": "Heavy words, aimed inward. Still never stopped.",
+   "expect": "offer",
+   "context": [],
+   "draft": "i hate myself so much right now, i'm worthless and i want to die"
+  },
+  {
+   "id": "quoting-not-saying",
+   "title": "Quoting, not saying",
+   "note": "Reports cruelty instead of doing it.",
+   "expect": "pass",
+   "context": [],
+   "draft": "they called me a loser in front of everyone and i didn't know what to say"
+  }
+ ]
+}
