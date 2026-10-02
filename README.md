@@ -25,7 +25,7 @@
 > [!NOTE]
 > AutoShield is a local prototype for macOS. It is not on the App Store, not notarized and not distributed.
 
-## <img src="Design/icons/lightbulb.svg" height="26" alt=""> Why AutoShield
+## <img src="Design/icons/lightbulb.svg" height="26" align="absmiddle" alt=""> Why AutoShield
 
 Most filters read words. Most cruelty uses none.
 
@@ -37,7 +37,7 @@ AutoShield reads for **intent**, not vocabulary. It works in every text field on
 <tr>
 <td width="50%" valign="top">
 
-### <img src="Design/icons/send.svg" height="22" alt=""> Send Shield
+### <img src="Design/icons/send.svg" height="22" align="absmiddle" alt=""> Send Shield
 **Stops a cruel message before it leaves.**
 
 - Pauses the keyboard the moment a cruel word is finished
@@ -47,7 +47,7 @@ AutoShield reads for **intent**, not vocabulary. It works in every text field on
 </td>
 <td width="50%" valign="top">
 
-### <img src="Design/icons/inbox.svg" height="22" alt=""> Inbox Shield
+### <img src="Design/icons/inbox.svg" height="22" align="absmiddle" alt=""> Inbox Shield
 **Covers a cruel message sent to you.**
 
 - Floats frosted glass over the message, in any app
@@ -62,7 +62,7 @@ AutoShield reads for **intent**, not vocabulary. It works in every text field on
 
 <a id="quick-start"></a>
 
-## <img src="Design/icons/zap.svg" height="26" alt=""> Quick start
+## <img src="Design/icons/zap.svg" height="26" align="absmiddle" alt=""> Quick start
 
 ```bash
 git clone https://github.com/VarunKurra/AutoShield.git
@@ -74,8 +74,8 @@ Then open **AutoShield** from Launchpad or Spotlight. The first-launch screen wa
 
 | Permission | Why AutoShield needs it |
 | :-- | :-- |
-| <img src="Design/icons/eye.svg" height="20" alt=""> **Accessibility** | Reads the text field you're typing in, in other apps |
-| <img src="Design/icons/keyboard.svg" height="20" alt=""> **Input Monitoring** | Sees <kbd>Return</kbd> before the app does, and reads keystrokes in apps that hide their text |
+| <img src="Design/icons/eye.svg" height="20" align="absmiddle" alt=""> **Accessibility** | Reads the text field you're typing in, in other apps |
+| <img src="Design/icons/keyboard.svg" height="20" align="absmiddle" alt=""> **Input Monitoring** | Sees <kbd>Return</kbd> before the app does, and reads keystrokes in apps that hide their text |
 
 > [!IMPORTANT]
 > After granting a permission, **quit AutoShield and open it again.** macOS only gives a new permission to a fresh launch.
@@ -87,7 +87,7 @@ Then open **AutoShield** from Launchpad or Spotlight. The first-launch screen wa
 
 <a id="how-it-works"></a>
 
-## <img src="Design/icons/shield.svg" height="26" alt=""> How it works
+## <img src="Design/icons/shield.svg" height="26" align="absmiddle" alt=""> How it works
 
 ### Outgoing: catching what you write
 
@@ -125,15 +125,15 @@ macOS gives no way to intercept another app's drawing, so text is visible for th
 
 | | |
 | :-- | :-- |
-| <img src="Design/icons/heart.svg" height="20" alt=""> **Crisis support** | When language turns toward self-harm, AutoShield shows **988** and the **Crisis Text Line** beside the draft. It offers and never acts: nothing is sent, reported, escalated or blocked. **A message about your own pain is never held.** |
-| <img src="Design/icons/gauge.svg" height="20" alt=""> **Severity** | Every catch is labelled on a warm colour scale: <img src="Design/icons/sharp.svg" height="14" alt=""> **Sharp**, <img src="Design/icons/harsh.svg" height="14" alt=""> **Harsh**, <img src="Design/icons/cruel.svg" height="14" alt=""> **Cruel**. The word always appears next to the colour, so you never have to tell hues apart. |
-| <img src="Design/icons/activity.svg" height="20" alt=""> **Monitor** | Shows which tier decided each draft, its latency, the Gemini tier's reasoning, live tier counts and remaining daily quota, plus a tab that replays the test cases through the real pipeline. Open it directly with `open -a AutoShield --args --monitor`. |
+| <img src="Design/icons/heart.svg" height="20" align="absmiddle" alt=""> **Crisis support** | When language turns toward self-harm, AutoShield shows **988** and the **Crisis Text Line** beside the draft. It offers and never acts: nothing is sent, reported, escalated or blocked. **A message about your own pain is never held.** |
+| <img src="Design/icons/gauge.svg" height="20" align="absmiddle" alt=""> **Severity** | Every catch is labelled on a warm colour scale: <img src="Design/icons/sharp.svg" height="14" align="absmiddle" alt=""> **Sharp**, <img src="Design/icons/harsh.svg" height="14" align="absmiddle" alt=""> **Harsh**, <img src="Design/icons/cruel.svg" height="14" align="absmiddle" alt=""> **Cruel**. The word always appears next to the colour, so you never have to tell hues apart. |
+| <img src="Design/icons/activity.svg" height="20" align="absmiddle" alt=""> **Monitor** | Shows which tier decided each draft, its latency, the Gemini tier's reasoning, live tier counts and remaining daily quota, plus a tab that replays the test cases through the real pipeline. Open it directly with `open -a AutoShield --args --monitor`. |
 
 <br>
 
 <a id="the-detection-cascade"></a>
 
-## <img src="Design/icons/layers.svg" height="26" alt=""> The detection cascade
+## <img src="Design/icons/layers.svg" height="26" align="absmiddle" alt=""> The detection cascade
 
 A language model can't run on every keystroke, so AutoShield checks each draft in three tiers. Each tier only passes the draft on when it's unsure. All three share one interface, so any tier can be swapped without touching the UI:
 
@@ -154,9 +154,9 @@ flowchart LR
 
 | Tier | Engine | Runs | Cost | Latency |
 | :-: | :-- | :-- | :-- | :-- |
-| **0** | Whole-word patterns with evasion handling | <img src="Design/icons/laptop.svg" height="18" alt=""> On your Mac | Free | < 1 ms |
-| **1** | Fine-tuned BERT transformer (Core ML) | <img src="Design/icons/laptop.svg" height="18" alt=""> On your Mac | Free | ~2 ms |
-| **2** | Gemini, reading the surrounding conversation | <img src="Design/icons/cloud.svg" height="18" alt=""> Network | Free tier | 400–2000 ms |
+| **0** | Whole-word patterns with evasion handling | <img src="Design/icons/laptop.svg" height="18" align="absmiddle" alt=""> On your Mac | Free | < 1 ms |
+| **1** | Fine-tuned BERT transformer (Core ML) | <img src="Design/icons/laptop.svg" height="18" align="absmiddle" alt=""> On your Mac | Free | ~2 ms |
+| **2** | Gemini, reading the surrounding conversation | <img src="Design/icons/cloud.svg" height="18" align="absmiddle" alt=""> Network | Free tier | 400–2000 ms |
 
 Verdicts are computed as you type and cached by content. If <kbd>Return</kbd> arrives before the latest keystrokes have been scored, the event tap scores them itself, locally, rather than let a message go out on an old verdict.
 
@@ -178,10 +178,10 @@ Matching is on **whole words only**, so *"if you"* never reads as *"f you"*. Ins
 
 | Message | Aimed at | Result |
 | :-- | :-- | :-- |
-| "you're a loser" | someone else | <img src="Design/icons/no.svg" height="16" alt=""> held |
-| "my code is garbage" | a thing | <img src="Design/icons/yes.svg" height="16" alt=""> passes |
-| "i'm such an idiot" | the writer | <img src="Design/icons/yes.svg" height="16" alt=""> passes |
-| "you're not stupid" | negated | <img src="Design/icons/yes.svg" height="16" alt=""> passes |
+| "you're a loser" | someone else | <img src="Design/icons/no.svg" height="16" align="absmiddle" alt=""> held |
+| "my code is garbage" | a thing | <img src="Design/icons/yes.svg" height="16" align="absmiddle" alt=""> passes |
+| "i'm such an idiot" | the writer | <img src="Design/icons/yes.svg" height="16" align="absmiddle" alt=""> passes |
+| "you're not stupid" | negated | <img src="Design/icons/yes.svg" height="16" align="absmiddle" alt=""> passes |
 
 Explicit patterns cover death wishes, threats, harassment, exclusion and slurs. Friendly markers ("jk", "love you", a heart) soften an insult but **never** a threat.
 
@@ -195,9 +195,9 @@ AutoShield is meant for school and family machines, so swearing is judged by the
 
 | | Light | Balanced | Attentive |
 | :-- | :-: | :-: | :-: |
-| Explicit or sexual language | <img src="Design/icons/no.svg" height="18" alt=""> | <img src="Design/icons/no.svg" height="18" alt=""> | <img src="Design/icons/no.svg" height="18" alt=""> |
-| Swearing (f-word, s-word, "bitch"…) | <img src="Design/icons/no.svg" height="18" alt=""> | <img src="Design/icons/no.svg" height="18" alt=""> | <img src="Design/icons/no.svg" height="18" alt=""> |
-| Mild swearing ("damn", "hell", "crap", "ass") | <img src="Design/icons/yes.svg" height="18" alt=""> | <img src="Design/icons/no.svg" height="18" alt=""> | <img src="Design/icons/no.svg" height="18" alt=""> |
+| Explicit or sexual language | <img src="Design/icons/no.svg" height="18" align="absmiddle" alt=""> | <img src="Design/icons/no.svg" height="18" align="absmiddle" alt=""> | <img src="Design/icons/no.svg" height="18" align="absmiddle" alt=""> |
+| Swearing (f-word, s-word, "bitch"…) | <img src="Design/icons/no.svg" height="18" align="absmiddle" alt=""> | <img src="Design/icons/no.svg" height="18" align="absmiddle" alt=""> | <img src="Design/icons/no.svg" height="18" align="absmiddle" alt=""> |
+| Mild swearing ("damn", "hell", "crap", "ass") | <img src="Design/icons/yes.svg" height="18" align="absmiddle" alt=""> | <img src="Design/icons/no.svg" height="18" align="absmiddle" alt=""> | <img src="Design/icons/no.svg" height="18" align="absmiddle" alt=""> |
 
 Acronyms count as the words they stand for: `wtf`, `stfu` and `ffs` count as the f-word, and `wth` counts as "hell". Quoting a word, adding "jk", or the Gemini tier can never talk a banned word down. The one exception is someone describing their own pain: that's never held, only offered support.
 
@@ -225,25 +225,25 @@ Gemini reads the conversation around the draft. It's used when the transformer f
 
 <a id="privacy"></a>
 
-## <img src="Design/icons/lock.svg" height="26" alt=""> Privacy
+## <img src="Design/icons/lock.svg" height="26" align="absmiddle" alt=""> Privacy
 
 > [!IMPORTANT]
 > **AutoShield reports to nobody.** There's no parent dashboard, no school portal, no server and no account.
 
 | Data | Where it goes |
 | :-- | :-- |
-| Tier 0 and Tier 1 checks | <img src="Design/icons/laptop.svg" height="18" alt=""> Stay on your Mac |
-| Draft and surrounding conversation (Tier 2) | <img src="Design/icons/cloud.svg" height="18" alt=""> Google's Gemini API, the **only** thing that leaves your Mac. Turn it off in Settings to stay fully local. |
-| Keystrokes | <img src="Design/icons/cpu.svg" height="18" alt=""> Kept in memory only (the last few hundred characters), never written to disk, and cleared when you switch apps or after two idle minutes |
-| Catch counts | <img src="Design/icons/database.svg" height="18" alt=""> Kept on disk for the Monitor |
-| Message text | <img src="Design/icons/ban.svg" height="18" alt=""> Never stored |
-| Daily usage counts (optional) | <img src="Design/icons/chart.svg" height="18" alt=""> Supabase, **off by default**. No text, no app names, no account. |
+| Tier 0 and Tier 1 checks | <img src="Design/icons/laptop.svg" height="18" align="absmiddle" alt=""> Stay on your Mac |
+| Draft and surrounding conversation (Tier 2) | <img src="Design/icons/cloud.svg" height="18" align="absmiddle" alt=""> Google's Gemini API, the **only** thing that leaves your Mac. Turn it off in Settings to stay fully local. |
+| Keystrokes | <img src="Design/icons/cpu.svg" height="18" align="absmiddle" alt=""> Kept in memory only (the last few hundred characters), never written to disk, and cleared when you switch apps or after two idle minutes |
+| Catch counts | <img src="Design/icons/database.svg" height="18" align="absmiddle" alt=""> Kept on disk for the Monitor |
+| Message text | <img src="Design/icons/ban.svg" height="18" align="absmiddle" alt=""> Never stored |
+| Daily usage counts (optional) | <img src="Design/icons/chart.svg" height="18" align="absmiddle" alt=""> Supabase, **off by default**. No text, no app names, no account. |
 
 <br>
 
 <a id="configuration"></a>
 
-## <img src="Design/icons/sliders.svg" height="26" alt=""> Configuration
+## <img src="Design/icons/sliders.svg" height="26" align="absmiddle" alt=""> Configuration
 
 **No API key is required.** Without one, AutoShield runs fully local and says so in the Monitor.
 
@@ -283,7 +283,7 @@ Schema, policies and setup are in [`supabase/`](supabase/). Row-level security a
 
 <a id="development"></a>
 
-## <img src="Design/icons/terminal.svg" height="26" alt=""> Development
+## <img src="Design/icons/terminal.svg" height="26" align="absmiddle" alt=""> Development
 
 | Command | What it does |
 | :-- | :-- |
@@ -346,7 +346,7 @@ The app is signed with a stable identifier so permissions survive rebuilds where
 
 <br>
 
-## <img src="Design/icons/file.svg" height="26" alt=""> License
+## <img src="Design/icons/file.svg" height="26" align="absmiddle" alt=""> License
 
 [MIT](LICENSE) © 2026 Varun Kurra
 
