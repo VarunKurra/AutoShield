@@ -32,13 +32,19 @@ struct SettingsView: View {
                     Paper {
                         Row(symbol: "paperplane.fill", tint: Palette.accent,
                             title: "Outgoing",
-                            detail: "Catches Return on a cruel message",
+                            detail: "Stops a cruel message from being sent. Needs Input Monitoring",
                             isOn: Binding(get: { settings.sendShieldEnabled },
                                           set: { settings.sendShieldEnabled = $0 }))
                         Line()
+                        Row(symbol: "keyboard.fill", tint: Palette.accent,
+                            title: "Catch while typing",
+                            detail: "Pauses cruel text as it is written in any app, not only on Return",
+                            isOn: Binding(get: { settings.liveCatchEnabled },
+                                          set: { settings.liveCatchEnabled = $0 }))
+                        Line()
                         Row(symbol: "eye.slash.fill", tint: Palette.calm,
                             title: "Incoming",
-                            detail: "Covers a cruel message sent to you until you click it",
+                            detail: "Covers a cruel message sent to you. Needs Accessibility only",
                             isOn: Binding(get: { settings.inboxShieldEnabled },
                                           set: { settings.inboxShieldEnabled = $0 }))
                         Line()

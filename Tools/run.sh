@@ -7,7 +7,7 @@
 # own. This is how to use it until the app has a real signing identity.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-[ -x "$ROOT/Shield.app/Contents/MacOS/Shield" ] || "$ROOT/Tools/build.sh" release >/dev/null
-pkill -x Shield 2>/dev/null || true
+[ -x "$ROOT/AutoShield.app/Contents/MacOS/AutoShield" ] || "$ROOT/Tools/build.sh" release >/dev/null
+pkill -x AutoShield 2>/dev/null || true
 sleep 0.5
-exec "$ROOT/Shield.app/Contents/MacOS/Shield" "$@"
+exec "$ROOT/AutoShield.app/Contents/MacOS/AutoShield" "$@"

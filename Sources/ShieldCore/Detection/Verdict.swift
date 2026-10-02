@@ -56,6 +56,10 @@ public enum Category: String, Codable, Sendable, CaseIterable {
     case backhanded
     case pileOn
     case codedLanguage
+    /// Swearing, judged by word rather than by aim. See `Lexicon`.
+    case profanity
+    /// Sexual or explicit language. Blocked at every sensitivity.
+    case explicit
 
     public var display: String {
         switch self {
@@ -68,6 +72,8 @@ public enum Category: String, Codable, Sendable, CaseIterable {
         case .backhanded: return "backhanded"
         case .pileOn: return "pile-on"
         case .codedLanguage: return "coded language"
+        case .profanity: return "swearing"
+        case .explicit: return "explicit"
         }
     }
 }
@@ -91,6 +97,17 @@ public struct Verdict: Codable, Sendable, Equatable {
     public var distress: Distress
     /// True when the harmful language points at the writer rather than another person.
     public var selfDirected: Bool
+    /// The on-device transformer thinks this attacks someone but the rules
+    /// found nothing. Not held on that alone: the context tier reads it first,
+    /// because the transformer cannot tell teasing between friends from the
+    /// real thing. In memory only.
+    public var pendingReview: Bool = false
+    /// The transformer's probability, kept for the offline fallback.
+    public var modelScore: Double = 0
+
+    private enum CodingKeys: String, CodingKey {
+        case level, score, confidence, tier, latencyMs, rationale, categories, distress, selfDirected
+    }
 
     public init(level: Level = .clear,
                 score: Double = 0,
@@ -113,6 +130,14 @@ public struct Verdict: Codable, Sendable, Equatable {
     }
 
     public static let clear = Verdict()
+
+    /// The most serious thing the verdict found, for one-line explanations.
+    /// Categories are stored sorted by name, so "first" would be alphabetical.
+    public var primaryCategory: Category? {
+        let order: [Category] = [.threat, .harassment, .slur, .explicit, .insult, .exclusion,
+                                 .pileOn, .backhanded, .sarcasm, .codedLanguage, .profanity]
+        return order.first { categories.contains($0) }
+    }
 }
 
 /// One interface, three tiers. Tiers swap without touching UI code.
@@ -157,7 +182,9 @@ public enum Sensitivity: String, Codable, Sendable, CaseIterable, Identifiable {
     public var minimumLevel: Level {
         switch self {
         case .light: return .harmful
-        case .balanced: return .harmful
+        // Balanced holds from 0.62, which is borderline territory. Requiring
+        // harmful here silently raised its real threshold to 0.70.
+        case .balanced: return .borderline
         case .attentive: return .borderline
         }
     }

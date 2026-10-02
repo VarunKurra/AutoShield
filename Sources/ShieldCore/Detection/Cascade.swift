@@ -62,13 +62,82 @@ public final class Cascade: @unchecked Sendable {
         set { lock.lock(); _contextEnabled = newValue; lock.unlock() }
     }
 
-    /// Scores below this at tier 0 with nothing else interesting stop there.
+    /// Scores at or above this at tier 0 need nobody else's opinion.
     private static let rulesDecisive = 0.85
-    /// The band where neither cheap tier is convincing.
-    private static let uncertainLow = 0.28
-    private static let uncertainHigh = 0.74
+    /// The band where the local tiers are not convincing either way.
+    private static let uncertainLow = 0.30
+    private static let uncertainHigh = 0.80
     /// How odd the shape has to look before context is worth a request.
     private static let ambiguityGate = 0.42
+    /// Model confidence that counts as a strong opinion.
+    private static let modelStrong = 0.90
+
+    /// The verdict without the network: rules, with the on-device model as a
+    /// second opinion. Synchronous and around a millisecond, so it is safe on
+    /// the keystroke path, and it is what the live catch and the Return key
+    /// decide on.
+    ///
+    /// The model never holds a message on its own. It was trained on public
+    /// corpora that do not sound like a group chat, and on its own it reads
+    /// "you have to try this ramen" as an attack. It may only push a score the
+    /// rules already found borderline over the line, and flag addressed text
+    /// for the context tier.
+    public func localVerdict(_ text: String, context ctx: [String] = []) -> (verdict: Verdict, report: RuleReport, model: Double) {
+        let report = rules.evaluate(text, context: ctx)
+        var verdict = report.verdict
+        if verdict.selfDirected || report.trivial || verdict.score >= Cascade.rulesDecisive {
+            return (verdict, report, 0)
+        }
+        let m = onDevice.score(text)
+        verdict.modelScore = m.score
+        let affectionate = report.hits.contains("affectionate")
+        let quoted = report.hits.contains("quoted")
+        // "shut up" is as often delight as dismissal; the model cannot tell.
+        let weakOnly = report.hits.allSatisfy { $0 == "phrase:shut up" || $0.hasPrefix("profanity:") }
+        // The old bag-of-words model may push a borderline score over the
+        // line. The transformer is too sure of itself on teasing for that;
+        // its borderline cases go to review below instead.
+        if !onDevice.isTransformer, !affectionate, !quoted, !weakOnly, report.addressed,
+           verdict.score >= 0.35, verdict.score < 0.66, m.score >= Cascade.modelStrong {
+            verdict.score = 0.66
+            verdict.tier = .onDevice
+            verdict.confidence = max(verdict.confidence, m.confidence)
+            if verdict.categories.isEmpty { verdict.categories = [.insult] }
+        } else {
+            verdict.confidence = max(verdict.confidence, m.confidence * 0.8)
+        }
+        // The rules missed it and the transformer is sure. Ask the context
+        // tier; if there is no context tier to ask, trust the transformer.
+        if !affectionate, !quoted, report.addressed, verdict.score < 0.62,
+           m.score >= Cascade.modelStrong, onDevice.isTransformer {
+            if contextReachable {
+                verdict.pendingReview = true
+            } else {
+                Cascade.applyOfflineFallback(&verdict)
+            }
+        }
+        verdict.level = Tier0Rules.level(for: verdict.score)
+        verdict.latencyMs = report.verdict.latencyMs + m.latencyMs
+        return (verdict, report, m.score)
+    }
+
+    /// True when a context-tier request could be made right now.
+    public var contextReachable: Bool {
+        contextEnabled && context.isAvailable && context.status.remainingToday > 0
+    }
+
+    /// With no context tier to ask, a transformer this sure holds on its own
+    /// at Attentive only. Alone it cannot tell "you guys are crazy" from an
+    /// attack (it scores both near 1.0), so Light and Balanced wait for a
+    /// second opinion that is not coming, and let the message go.
+    public static func applyOfflineFallback(_ v: inout Verdict) {
+        v.pendingReview = false
+        guard v.modelScore >= 0.98 else { return }
+        v.score = max(v.score, 0.5)
+        v.tier = .onDevice
+        if v.categories.isEmpty { v.categories = [.insult] }
+        v.level = Tier0Rules.level(for: v.score)
+    }
 
     public func analyze(_ text: String,
                         context ctx: [String] = [],
@@ -83,8 +152,7 @@ public final class Cascade: @unchecked Sendable {
                                  fromCache: true)
         }
 
-        let report = rules.evaluate(text, context: ctx)
-        var verdict = report.verdict
+        let (verdict, report, model) = localVerdict(text, context: ctx)
 
         // Someone talking about their own pain leaves here, always clear.
         if verdict.selfDirected {
@@ -102,16 +170,20 @@ public final class Cascade: @unchecked Sendable {
                                  fromCache: false)
         }
 
-        // Tier 1.
-        let t1 = onDevice.score(text)
-        verdict = merge(rules: verdict, model: t1)
-
-        let uncertain = verdict.score > Cascade.uncertainLow && verdict.score < Cascade.uncertainHigh
+        // A banned word is a banned word; there is nothing for context to add.
+        let wordPolicy = verdict.categories.contains(.profanity) || verdict.categories.contains(.explicit)
+        let uncertain = !wordPolicy && verdict.score > Cascade.uncertainLow && verdict.score < Cascade.uncertainHigh
         let shapeOdd = report.ambiguity >= Cascade.ambiguityGate
-        let wantsContext = allowContext && contextEnabled && self.context.isAvailable && (uncertain || shapeOdd)
+        let modelSuspects = verdict.pendingReview || (report.addressed && model >= Cascade.modelStrong)
+        let wantsContext = allowContext && contextEnabled && self.context.isAvailable
+            && (uncertain || shapeOdd || modelSuspects)
 
         guard wantsContext else {
-            cache.set(key, verdict)
+            var verdict = verdict
+            // Not reviewed this time (context not allowed on this pass): do
+            // not cache a verdict that is still waiting for review.
+            if verdict.pendingReview && allowContext { Cascade.applyOfflineFallback(&verdict) }
+            if !verdict.pendingReview { cache.set(key, verdict) }
             return CascadeResult(verdict: verdict,
                                  trace: trace(text, verdict, escalated: false, source: "T1 \(onDevice.isModelLoaded ? "model" : "fallback")"),
                                  fromCache: false)
@@ -126,7 +198,10 @@ public final class Cascade: @unchecked Sendable {
                                  trace: trace(text, merged, escalated: true, source: "T2 \(self.context.status.model)"),
                                  fromCache: false)
         } catch {
-            // Quota gone, offline, malformed — keep the optimistic verdict.
+            // Quota gone, offline, malformed — keep the local verdict, and if
+            // it was waiting on review, let the transformer decide.
+            var verdict = verdict
+            if verdict.pendingReview { Cascade.applyOfflineFallback(&verdict) }
             cache.set(key, verdict)
             let reason: String
             switch error {
@@ -140,24 +215,6 @@ public final class Cascade: @unchecked Sendable {
         }
     }
 
-    /// Rules never get overruled downward by the model; the model can only
-    /// raise a score the rules were unsure about.
-    private func merge(rules r: Verdict, model m: Verdict) -> Verdict {
-        var out = r
-        if m.score > r.score {
-            out.score = min(m.score, 0.88)
-            out.tier = .onDevice
-            out.confidence = max(r.confidence, m.confidence)
-            out.categories = Array(Set(r.categories).union(m.categories)).sorted { $0.rawValue < $1.rawValue }
-        } else {
-            out.confidence = max(r.confidence, m.confidence * 0.8)
-            out.tier = r.score > 0 ? .rules : .onDevice
-        }
-        out.level = Tier0Rules.level(for: out.score)
-        out.latencyMs = r.latencyMs + m.latencyMs
-        return out
-    }
-
     /// Context wins, because it is the only tier that read the conversation.
     private func merge(context c: Verdict, fallback f: Verdict) -> Verdict {
         var out = c
@@ -165,6 +222,12 @@ public final class Cascade: @unchecked Sendable {
         out.categories = c.categories.isEmpty ? f.categories : c.categories
         // Explicit abuse the rules already caught cannot be talked down.
         if f.score >= 0.85 { out.score = max(out.score, f.score) }
+        // Nor can a word the policy bans: swearing and explicit language are
+        // judged by the word, and no reading of the conversation changes that.
+        if f.categories.contains(.profanity) || f.categories.contains(.explicit) {
+            out.score = max(out.score, f.score)
+            out.categories = Array(Set(out.categories).union(f.categories)).sorted { $0.rawValue < $1.rawValue }
+        }
         out.level = Tier0Rules.level(for: out.score)
         out.latencyMs = f.latencyMs + c.latencyMs
         return out

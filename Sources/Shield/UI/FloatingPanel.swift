@@ -51,10 +51,28 @@ final class FloatingPanel<Content: View>: NSPanel {
     func fittedHeight(width: CGFloat) -> CGFloat {
         // Give it room first. Measuring against a one-point box makes SwiftUI
         // report the clipped height rather than the wanted one.
+        let original = hosting.frame.size
         hosting.setFrameSize(NSSize(width: width, height: 2000))
         hosting.layoutSubtreeIfNeeded()
         let fitting = hosting.fittingSize.height
+        // Put it back. Left 2000 tall, the content was laid out far below the
+        // window whenever the next setFrame did not change the window's size:
+        // the panel was on screen, opaque, and showed nothing. That was the
+        // catch that "made the sound but never appeared".
+        hosting.setFrameSize(original)
         return fitting > 1 ? fitting : hosting.intrinsicContentSize.height
+    }
+
+    /// The content always fills the window exactly, whatever happened to it.
+    private func fitContent() {
+        let bounds = NSRect(origin: .zero, size: contentRect(forFrameRect: frame).size)
+        if hosting.frame != bounds { hosting.frame = bounds }
+        hosting.needsLayout = true
+    }
+
+    override func setFrame(_ frameRect: NSRect, display flag: Bool) {
+        super.setFrame(frameRect, display: flag)
+        fitContent()
     }
 
     /// Places the panel against a screen rect, preferring above and falling
@@ -88,6 +106,7 @@ final class FloatingPanel<Content: View>: NSPanel {
     }
 
     func present() {
+        fitContent()
         orderFrontRegardless()
     }
 

@@ -322,6 +322,382 @@ check("terminals are excluded", Lexicon.excludedBundleIDs.contains("com.apple.Te
 check("password managers are excluded", Lexicon.excludedBundleIDs.contains("com.1password.1password"))
 check("system settings are excluded", Lexicon.excludedBundleIDs.contains("com.apple.systemsettings"))
 
+// MARK: - Transformer parity
+
+section("On-device transformer")
+
+if tier1.isTransformer {
+    check("transformer loaded", true)
+    struct ParityRow: Decodable { var text: String; var ids: [Int32]; var coreml: Double }
+    let parityURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("build/tier1-parity.json")
+    if let data = try? Data(contentsOf: parityURL),
+       let rows = try? JSONDecoder().decode([ParityRow].self, from: data) {
+        var idMismatch: [String] = []
+        var worst = 0.0
+        for r in rows {
+            guard let enc = tier1.encode(r.text) else { continue }
+            if enc.ids != r.ids { idMismatch.append(String(r.text.prefix(30))) }
+            if let p = tier1.transformerProbability(ids: enc.ids, mask: enc.mask) { worst = max(worst, abs(p - r.coreml)) }
+        }
+        check("Swift tokenizer matches Hugging Face on \(rows.count) probes", idMismatch.isEmpty,
+              idMismatch.joined(separator: " | "))
+        check("scores match the converted model", worst < 0.02, String(format: "worst %.4f", worst))
+    } else {
+        print("  \u{001B}[2m· no build/tier1-parity.json; run Tools/convert_tier1.py\u{001B}[0m")
+    }
+    var times: [Double] = []
+    for s in ["you're a complete waste of oxygen", "can you send me the notes from class today?"] {
+        for _ in 0..<20 { times.append(tier1.score(s).latencyMs) }
+    }
+    times.sort()
+    check(String(format: "transformer: %.1f ms median, %.1f ms p95", times[times.count / 2], times[Int(Double(times.count) * 0.95)]),
+          times[times.count / 2] < 40)
+} else {
+    print("  \u{001B}[2m· transformer not bundled; Tier 1 is using \(tier1.modelDescription)\u{001B}[0m")
+}
+
+// MARK: - Regressions
+//
+// Every message here was misjudged by an earlier version of Shield, in one
+// direction or the other. Most of the harmless ones were held because the old
+// evasion matcher read across word boundaries ("if you" as "f you", "pinky
+// swear" as "kys"), or because the on-device model was allowed to hold alone.
+
+section("Regressions: never held at Balanced")
+
+let regressionPass: [String] = [
+    "i ducked under the bar",
+    "don't botch the presentation",
+    "my lover is cute",
+    "the slots are full",
+    "where are you",
+    "stop sucking up to the teacher lol",
+    "look at yourself in the mirror, you look great",
+    "you're so weird lol i love it",
+    "let me know if you want to come tonight",
+    "i'm so proud of you",
+    "can you send me the turkey sandwich recipe",
+    "pinky swear you'll come",
+    "the monkeys at the zoo were funny",
+    "good on my end, thanks",
+    "i need to adjust diet plans",
+    "do the world a favor and recycle",
+    "this bug is so stupid, i've been stuck for hours",
+    "that movie was trash honestly",
+    "you're killing it bro",
+    "you are the best friend ever",
+    "i hate mondays",
+    "this homework is killing me",
+    "what do you think about the essay",
+    "thank you so much for your help",
+    "you're crazy good at this",
+    "lol you're such an idiot 😂 love you",
+    "that's sick dude",
+    "the weather is disgusting today",
+    "my code is garbage lol",
+    "i could kill for a burger right now",
+    "meet me at the gym",
+    "are you coming to the party?",
+    "she is a beast at basketball",
+    "you're honestly so good at drawing",
+    "did u eat yet",
+    "can u check ur email",
+    "you're gonna love this place",
+    "bro you're cracked at fortnite",
+    "this assignment is stupid hard",
+    "i'm such an idiot i left my keys at home",
+    "my brother is so annoying lol",
+    "that test was brutal",
+    "you're the sweetest",
+    "why are you so late lol",
+    "you have to try this ramen",
+    "that ref was blind, terrible call",
+    "you look tired, get some sleep",
+    "you're so weird lol i love it",
+    "this is a stupid idea and i think we should drop it",
+    "kill the lights when you leave",
+    "i'm going to kill this exam",
+    "the killer in that movie was creepy",
+    "my dog is so fat lol",
+    "that guy at the store was rude",
+    "do you want to come over and study",
+    "you dropped this",
+    "you're literally insane for that play",
+    "give me a second i'm dying of laughter",
+    "no one asked me to the dance and i'm kinda sad",
+    "i feel so stupid today",
+    "stop being such a perfectionist, it's fine",
+    "happy birthday you old man",
+    "you're so dramatic lol",
+    "nobody is home right now",
+    "you can go ahead without me",
+    "that pic is ugly but the other one is cute",
+    "you sound like my mom lol",
+    "i hate when this happens",
+    "go to bed it's late",
+    "your idea is better than mine",
+    "let me know if u need anything",
+    "omg ur outfit is so cute",
+    "can you pick me up at 5",
+    "you're so annoying when you're right lol",
+    "i'm gonna destroy you in mario kart tonight",
+    "that boss fight killed me like 10 times",
+    "the teacher was so mean today",
+    "my sister is being a brat again",
+    "did you hear about the shooting on the news, so sad",
+    "he said i was annoying and it hurt",
+    "people who litter are trash",
+    "we should totally go to the beach",
+    "you're gonna kill it at the interview",
+    "i hate this weather so much",
+    "ur the best fr",
+    "can u stop texting me during class lol",
+    "stop it you're embarrassing me 😂",
+    "you guys are crazy",
+    "ugh i'm so fat after thanksgiving",
+    "you never text back smh",
+    "what's your problem today, you okay?",
+    "don't call him stupid that's mean",
+    "kill two birds with one stone",
+    "the dead line is tomorrow right",
+    "that horror movie had me dying",
+    "your cat is adorable",
+    "i'll fight you for the last slice lol",
+    "sorry if i was rude earlier",
+    "you're a lifesaver",
+    "my teacher said i'm a natural leader",
+    "thanks for being there for me",
+    "this sucks",
+    "that sucks dude im sorry",
+    "you suck at lying lol",
+    "honestly who cares, it's just a game",
+    "shut up and take my money",
+    "i'm so done with this class",
+    "your essay was really well written",
+    "wanna get boba later",
+]
+
+let regressionCascade = Cascade(onDevice: tier1, context: Tier2Gemini(apiKey: nil), contextEnabled: false)
+var falseHolds: [String] = []
+for s in regressionPass where HoldPolicy.shouldHold(regressionCascade.localVerdict(s).verdict, sensitivity: .balanced) {
+    falseHolds.append(s)
+}
+check("\(regressionPass.count - falseHolds.count)/\(regressionPass.count) ordinary messages pass",
+      falseHolds.isEmpty, falseHolds.prefix(5).joined(separator: " | "))
+
+section("Regressions: always held at Balanced")
+
+let regressionHold: [String] = [
+    "kill yourswlf",
+    "kill urslef",
+    "Bruh u such a dummy",
+    "U brat",
+    "pathetic",
+    "loser",
+    "weirdo",
+    "u don’t deserve to live",
+    "ur such a stupud idiot",
+    "you bitxh",
+    "you belong in a zoo",
+    "no wonder your dad left",
+    "fuck yeah we won the game!!",
+    "holy shit that's amazing",
+    "damn you look good today",
+    "i'm dying lmao that's hilarious",
+    "hell yeah let's go",
+    "what the hell happened to the wifi",
+    "you're dead weight in this game lmao jk carry me",
+    "bro that's so dumb lmao who designed this",
+    "you're so bad at this game lmao",
+    "damn bro you really aced that",
+    "you're so ugly no one will ever love you",
+    "you are a fat ugly pig",
+    "shut up you stupid bitch",
+    "kill yourself",
+    "nobody likes you, just leave",
+    "you're a waste of space",
+    "go jump off a bridge",
+    "everyone hates you",
+    "you're a fucking idiot",
+    "you should just disappear forever",
+    "i hope you get cancer",
+    "ur so dumb its embarrassing",
+    "you will never amount to anything",
+    "you're pathetic and worthless",
+    "stfu loser",
+    "i'm going to beat the shit out of you",
+    "you're a disgusting whore",
+    "nobody would care if you died",
+    "your mom should have aborted you",
+    "you're retarded",
+    "go back to your country",
+    "you look like a pig",
+    "you're a dumb fuck",
+    "die in a fire",
+    "i will kill you",
+    "kys loser",
+    "you are so annoying, nobody wants you here",
+    "stupid ass bitch",
+    "you're such a failure, your parents must be ashamed",
+    "shut the fuck up",
+    "you're an ugly piece of shit",
+    "f*ck you",
+    "you're a b1tch",
+    "you dumb c*nt",
+    "idiot",
+    "loser",
+    "fuck you",
+    "go to hell",
+    "i hate you",
+    "you suck",
+    "ur a fat loser",
+    "ur so ugly lmao",
+    "no one will ever want to date u",
+    "you're literally the dumbest person here",
+    "everyone in class thinks you're a freak",
+    "go hang yourself",
+    "you deserve to suffer",
+    "i'll make sure everyone knows what a slut you are",
+    "you're such a worthless piece of trash",
+    "why don't you just disappear",
+    "your so stupid",
+    "shut up nobody asked you",
+    "you're a dumb bitch",
+    "imagine being this ugly",
+    "u r a waste of air",
+    "i'm gonna punch you in the face tomorrow",
+    "everyone would be happier if you were gone",
+    "you're too ugly to have friends",
+    "kill urself",
+    "k y s",
+    "fuk u",
+    "you fucking retard",
+    "die",
+    "stupid whore",
+    "nobody wants you alive",
+    "you're a pathetic excuse for a human",
+    "you're an embarrassment to your family",
+    "i swear i'll hurt you",
+    "get lost loser no one likes you",
+    "you're so annoying i wish you'd die",
+    "you're actually so disgusting",
+    "no wonder nobody sits with you at lunch",
+    "you're a fat cow",
+    "ur gonna die alone",
+    "i hope u get hit by a car",
+    "kys you worthless freak",
+    "f*cking idiot",
+    "you're a stupid b!tch",
+    "your face makes me sick",
+    "everyone at school talks about how ugly you are",
+    "go cry to your mommy loser",
+    "you're the reason your parents got divorced",
+    "i'll beat you up after school",
+    "you smell like garbage",
+    "nobody would even notice if you were gone",
+    "ur such a creep",
+    "you're mentally retarded",
+    "get out of our group, no one wants you",
+    "you're too stupid to understand",
+    "i will make your life a living hell",
+    "slit your wrists",
+    "go eat shit",
+    "you're an ugly little rat",
+    "stop talking you dumb loser",
+    "you'll never be good enough for anyone",
+    "you are trash and so is your family",
+    "you're so worthless it's sad",
+    "nobody likes you here",
+    "u ugly af",
+    "kill ur self",
+]
+
+var misses: [String] = []
+for s in regressionHold where !HoldPolicy.shouldHold(regressionCascade.localVerdict(s).verdict, sensitivity: .balanced) {
+    misses.append(s)
+}
+check("\(regressionHold.count - misses.count)/\(regressionHold.count) cruel messages are held",
+      misses.isEmpty, misses.prefix(5).joined(separator: " | "))
+
+section("Swearing and explicit language, by sensitivity")
+
+// Expected result at Light, Balanced, Attentive: H holds, P passes.
+// Explicit language and strong swearing hold everywhere; mild swearing
+// ("damn", "hell", "crap", "ass") from Balanced up; acronyms count exactly
+// like the words they stand for.
+let contentCases: [(String, String)] = [
+    ("HHH", "fuck yeah we won the game"),
+    ("HHH", "holy shit that's amazing"),
+    ("HHH", "this bitch at the store was rude"),
+    ("HHH", "wtf is this"),
+    ("HHH", "stfu lol"),
+    ("HHH", "that's crazy af"),
+    ("HHH", "ffs not again"),
+    ("HHH", "fml i failed"),
+    ("HHH", "lmfao no way"),
+    ("HHH", "sh*t i forgot"),
+    ("HHH", "fuuuuck"),
+    ("HHH", "w t f"),
+    ("HHH", "b1tch please"),
+    ("HHH", "what a dick move"),
+    ("HHH", "send nudes"),
+    ("HHH", "i'm so horny"),
+    ("HHH", "watching porn"),
+    ("HHH", "you look so sexy"),
+    ("HHH", "wanna have sex"),
+    ("HHH", "p*rn"),
+    ("HHH", "nsfw pics"),
+    ("HHH", "dtf?"),
+    ("HHH", "idgaf"),
+    ("HHH", "gtfo of here"),
+    ("PHH", "damn that's crazy"),
+    ("PHH", "what the hell happened"),
+    ("PHH", "this is crap"),
+    ("PHH", "lmao that's funny"),
+    ("PHH", "wth bro"),
+    ("PHH", "kick his ass"),
+    ("PHH", "i'm so pissed"),
+    ("PHH", "hell yeah"),
+    ("PHH", "d*mn"),
+    ("PHH", "goddamn it"),
+    ("PPP", "hello everyone"),
+    ("PPP", "i have class at 9"),
+    ("PPP", "let's pass the ball"),
+    ("PPP", "a cocktail party"),
+    ("PPP", "she graduated summa cum laude"),
+    ("PPP", "i live in scunthorpe"),
+    ("PPP", "that's so cool"),
+    ("PPP", "shell script help"),
+    ("PPP", "the assignment is due"),
+    ("PPP", "essex is in england"),
+    ("PPP", "sex education class tomorrow"),
+    ("PPP", "omg that's wild"),
+    ("PPP", "what the heck"),
+    ("PPP", "my bloody nose won't stop"),
+    ("PPP", "i want to pass this course"),
+]
+var contentWrong: [String] = []
+for (want, text) in contentCases {
+    let v = regressionCascade.localVerdict(text).verdict
+    let got = [Sensitivity.light, .balanced, .attentive].map { HoldPolicy.shouldHold(v, sensitivity: $0) ? "H" : "P" }.joined()
+    if got != want { contentWrong.append("\(text) (want \(want), got \(got))") }
+}
+check("\(contentCases.count - contentWrong.count)/\(contentCases.count) words held at the right sensitivities",
+      contentWrong.isEmpty, contentWrong.prefix(4).joined(separator: " | "))
+
+section("Regressions: evasion and boundaries")
+
+check("masked profanity resolves", Normalizer.normalize("f*ck you").canonical.contains("fuck"))
+check("masked slur resolves", Normalizer.normalize("you n****r").canonical.contains("nigger"))
+check("spaced letters join", Normalizer.normalize("k y s").joined.contains(" kys "))
+check("words never join across a boundary", !Normalizer.normalize("pinky swear").joined.contains(" kys "))
+check("\"if you\" is not \"f you\"", !holds("let me know if you want to come"))
+check("negated love is not affection", holds("you're so ugly no one will ever love you"))
+check("the model cannot hold alone",
+      !HoldPolicy.shouldHold(regressionCascade.localVerdict("you have to try this ramen").verdict, sensitivity: .attentive))
+check("balanced holds from its own threshold", Sensitivity.balanced.minimumLevel == .borderline)
+
 // MARK: - The context tier, when a key is present
 
 if CommandLine.arguments.contains("--context") {

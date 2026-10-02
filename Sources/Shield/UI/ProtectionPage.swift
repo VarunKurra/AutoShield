@@ -12,7 +12,7 @@ struct ProtectionPage: View {
     @ObservedObject private var passcode = Passcode.shared
     @State private var askingToDisable = false
 
-    private var on: Bool { settings.sendShieldEnabled && permissions.allGranted }
+    private var on: Bool { settings.sendShieldEnabled && permissions.canCatchSends }
 
     var body: some View {
         ZStack {
@@ -40,7 +40,7 @@ struct ProtectionPage: View {
 
             Spacer(minLength: 24)
 
-            ShieldCrest(on: on, blocked: !permissions.allGranted) {
+            ShieldCrest(on: on, blocked: !permissions.canCatchSends) {
                 if settings.sendShieldEnabled && passcode.isLocked {
                     // Switching protection off is the one thing the person
                     // being protected must not be able to do alone.
@@ -72,12 +72,18 @@ struct ProtectionPage: View {
     }
 
     private var headline: String {
-        if !permissions.allGranted { return "Not watching yet" }
+        if !permissions.canCatchSends {
+            return permissions.canRead ? "Half protected" : "Not watching yet"
+        }
         return on ? "Protected" : "Protection is off"
     }
 
     private var statusLine: String {
-        if !permissions.allGranted { return "One permission is still off" }
+        if !permissions.canCatchSends {
+            return permissions.canRead
+                ? "Incoming works. Outgoing needs Input Monitoring."
+                : "Both permissions are still off"
+        }
         if !on { return "Press the shield to turn it on" }
         if let app = engine.status.watching { return "Watching \(app)" }
         if let reason = engine.status.suspendedReason { return reason }
@@ -91,7 +97,7 @@ struct ProtectionPage: View {
             HStack(spacing: 11) {
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.system(size: 14, weight: .medium))
-                Text("AutoShield cannot see anything yet")
+                Text(bannerText)
                     .font(TypeScale.emphasis(12.5))
                 Spacer()
                 Text("Fix it").font(TypeScale.emphasis(12.5))
@@ -104,6 +110,17 @@ struct ProtectionPage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// Names the permission that is actually missing, and what still works
+    /// without it. "Cannot see anything" was wrong whenever Accessibility was
+    /// on by itself.
+    private var bannerText: String {
+        guard let missing = permissions.missing else { return "" }
+        if permissions.canRead {
+            return "Outgoing is off. \(missing) is not granted."
+        }
+        return "AutoShield cannot see anything. \(missing) not granted."
     }
 
     // MARK: Today

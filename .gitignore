@@ -23,3 +23,11 @@ config.json
 *.p12
 
 .DS_Store
+
+# Local signing identity, private key and certificate
+.signing/
+
+# Model fine-tuning environment
+.venv-model/
+
+AutoShield.app/

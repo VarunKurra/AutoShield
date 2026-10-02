@@ -49,6 +49,14 @@ final class OverlayController {
             }
             .store(in: &bag)
 
+        engine.$nudge
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                guard let self, let draft = self.engine?.held else { return }
+                self.refreshCatch(draft)
+            }
+            .store(in: &bag)
+
         engine.$crisisOffer
             .removeDuplicates()
             .sink { [weak self] offer in
@@ -71,32 +79,39 @@ final class OverlayController {
 
     // MARK: Catch
 
-    private func showCatch(_ draft: ShieldEngine.HeldDraft) {
-        DebugLog.write("showCatch entered")
-        let width = CatchOverlayView.width
-        let view = AnyView(
+    private func catchView(_ draft: ShieldEngine.HeldDraft) -> AnyView {
+        AnyView(
             CatchOverlayView(
                 draft: draft,
                 rephrase: engine?.rephrase,
+                nudge: engine?.nudge ?? 0,
                 onRephrase: { [weak self] in self?.engine?.rephraseAndSend() },
+                onRemove: { [weak self] in self?.engine?.deleteDraft() },
                 onEdit: { [weak self] in self?.engine?.editDraft() },
                 onSendUnchanged: { [weak self] in self?.engine?.sendUnchanged() },
                 onHeight: { [weak self] h in self?.catchHeightChanged(h) })
         )
+    }
 
-        if catchPanel == nil {
-            catchPanel = FloatingPanel(contentRect: CGRect(x: 0, y: 0, width: width, height: catchHeight)) { view }
-            DebugLog.write("panel created")
-        } else {
-            catchPanel?.update { view }
-            DebugLog.write("panel updated")
+    private func showCatch(_ draft: ShieldEngine.HeldDraft) {
+        DebugLog.write("showCatch entered")
+        let width = CatchOverlayView.width
+
+        // A fresh panel for every catch. Reusing one meant SwiftUI kept the
+        // previous catch's state, and after the first dismissal the panel
+        // could come back invisible while the keyboard stayed held — the
+        // "it only works the first time" bug.
+        catchPanel?.orderOut(nil)
+        catchPanel = FloatingPanel(contentRect: CGRect(x: 0, y: 0, width: width, height: catchHeight)) {
+            catchView(draft)
         }
+        // Above Inbox Shield's covers, which stay up while a draft is held.
+        catchPanel?.level = .popUpMenu
 
         trackedFrame = draft.fieldFrame
         shownAt = Date()
         lastGoodFrameAt = Date()
         missCount = 0
-        focusMoved = 0
         focusMoved = 0
 
         // Measure once up front so the first frame is already the right size,
@@ -106,20 +121,30 @@ final class OverlayController {
         }
         catchPanel?.anchor(to: draft.fieldFrame, size: CGSize(width: width, height: catchHeight))
         catchPanel?.present()
-
-        // A hold with no visible panel is a message that can never be sent, so
-        // verify the panel actually landed somewhere on a screen and recover
-        // by centring it if it did not.
-        if let panel = catchPanel {
-            let onScreen = NSScreen.screens.contains { $0.visibleFrame.intersects(panel.frame) }
-            if !panel.isVisible || !onScreen {
-                DebugLog.write("panel off screen at \(panel.frame), recentering")
-                panel.anchor(to: nil, size: CGSize(width: width, height: catchHeight))
-                panel.orderFrontRegardless()
-            }
+        ensureVisible()
+        // And once more after the arrival animation, in case a space switch
+        // or a full-screen app swallowed the first order-front.
+        let id = draft.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self, self.engine?.held?.id == id else { return }
+            self.ensureVisible()
         }
-        DebugLog.write("showCatch h=\(catchHeight) anchor=\(String(describing: draft.fieldFrame)) frame=\(catchPanel?.frame ?? .zero) visible=\(catchPanel?.isVisible ?? false) level=\(catchPanel?.level.rawValue ?? -1)")
+        let screenName = catchPanel?.screen?.localizedName ?? "none"
+        let frontWindow = NSWorkspace.shared.frontmostApplication.map { "\($0.localizedName ?? "?")" } ?? "?"
+        DebugLog.write("showCatch h=\(catchHeight) anchor=\(String(describing: draft.fieldFrame)) frame=\(catchPanel?.frame ?? .zero) visible=\(catchPanel?.isVisible ?? false) screen=\(screenName) activeSpace=\(catchPanel?.isOnActiveSpace ?? false) front=\(frontWindow)")
         startTracking()
+    }
+
+    /// A hold with no visible panel is a message that can never be sent, so
+    /// verify the panel actually landed on a screen and recover if it did not.
+    private func ensureVisible() {
+        guard let panel = catchPanel else { return }
+        let onScreen = NSScreen.screens.contains { $0.visibleFrame.intersects(panel.frame) }
+        if !onScreen {
+            DebugLog.write("panel off screen at \(panel.frame), recentering")
+            panel.anchor(to: nil, size: CGSize(width: CatchOverlayView.width, height: catchHeight))
+        }
+        if !panel.isVisible || !onScreen { panel.orderFrontRegardless() }
     }
 
     /// SwiftUI reporting its real height, including a rationale that arrived
@@ -139,20 +164,13 @@ final class OverlayController {
     /// arrival animation.
     private func refreshCatch(_ draft: ShieldEngine.HeldDraft) {
         guard let panel = catchPanel, panel.isVisible else { return }
-        panel.update {
-            AnyView(CatchOverlayView(
-                draft: draft,
-                rephrase: engine?.rephrase,
-                onRephrase: { [weak self] in self?.engine?.rephraseAndSend() },
-                onEdit: { [weak self] in self?.engine?.editDraft() },
-                onSendUnchanged: { [weak self] in self?.engine?.sendUnchanged() },
-                onHeight: { [weak self] h in self?.catchHeightChanged(h) }))
-        }
+        panel.update { catchView(draft) }
     }
 
     private func hideCatch() {
         stopTracking()
         catchPanel?.dismiss()
+        catchPanel = nil
     }
 
     // MARK: Crisis
@@ -189,7 +207,7 @@ final class OverlayController {
 
     private func startTracking() {
         stopTracking()
-        let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.retrack() }
         }
         RunLoop.main.add(t, forMode: .common)
@@ -203,6 +221,11 @@ final class OverlayController {
 
     private func frontmostChanged(to bundleID: String?) {
         guard let engine else { return }
+        // Hide first, decide second: the panel must not sit over the next
+        // app for even a frame.
+        if let draft = engine.held, !draft.preview, draft.bundleID != bundleID {
+            catchPanel?.orderOut(nil)
+        }
         if let draft = engine.held, !draft.preview, draft.bundleID != bundleID {
             engine.dismissHold()
         }
@@ -210,93 +233,89 @@ final class OverlayController {
         if engine.crisisOffer != nil { engine.dismissCrisis() }
     }
 
-    /// Runs at 20 Hz while a draft is held. Re-anchors when the window moves,
+    /// What one tracking pass found, computed off the main thread.
+    private enum TrackResult {
+        case keep(frame: CGRect?)
+        case dismiss(String, edit: Bool)
+    }
+    private let trackQueue = DispatchQueue(label: "shield.overlay.track", qos: .userInteractive)
+    private var tracking = false
+
+    /// Runs at 30 Hz while a draft is held. Re-anchors when the window moves,
     /// and lets go when the thing it was pointing at is gone.
     ///
-    /// It watches the held element directly rather than re-resolving focus,
-    /// because focus in a web view blinks out constantly: Chrome drops the
-    /// focused element for a frame whenever the page repaints, and a tracker
-    /// built on focus dismisses itself within 150 ms of every catch.
+    /// The Accessibility reads happen on a background queue: done on main,
+    /// they stalled the whole UI while scrolling. Main only moves the panel.
     private func retrack() {
         guard let engine, let draft = engine.held else { stopTracking(); return }
-        guard !draft.preview else { return }
-        guard let panel = catchPanel else { return }
-
-        // The first quarter second belongs to the catch animation; AX is often
-        // still settling there and a miss means nothing.
-        let settling = Date().timeIntervalSince(shownAt) < 0.25
-
-        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == draft.bundleID else {
-            DebugLog.write("dismiss: app switched")
-            engine.dismissHold(); return
-        }
-
-        guard let element = engine.heldElement else { engine.dismissHold(); return }
-
-        // Focus moving to a *different* field is the reliable signal that the
-        // draft has been left behind: a new tab, another input, a different
-        // window. Focus going to nil is not, because web views do that
-        // constantly, so nil is ignored here entirely.
-        if let focused = AX.focusedField(), !CFEqual(focused.element, element) {
-            if settling { return }
-            focusMoved += 1
-            if focusMoved >= 2 {
-                DebugLog.write("dismiss: focus moved to \(focused.role)")
-                engine.dismissHold()
-            }
-            return
-        }
-        focusMoved = 0
-
-        // A closed tab or a torn-down view stops answering entirely.
-        guard AX.isAlive(element) else {
-            if settling { return }
-            missCount += 1
-            if missCount >= 3 { DebugLog.write("dismiss: element gone"); engine.dismissHold() }
-            return
-        }
-
-        // The draft was replaced. Compared by containment, not equality,
-        // because autocorrect and trailing newlines change the string without
-        // changing the message.
-        let current = (AX.readValue(element) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let holdText = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !current.isEmpty && !current.contains(holdText) && !holdText.contains(current) {
-            if settling { return }
-            missCount += 1
-            if missCount >= 3 {
-                DebugLog.write("dismiss: text replaced now=\(current.prefix(40))")
-                engine.dismissHold()
-            }
-            return
-        }
-        if current.isEmpty && !holdText.isEmpty {
-            if settling { return }
-            missCount += 1
-            if missCount >= 4 { DebugLog.write("dismiss: field emptied"); engine.dismissHold() }
-            return
-        }
-
-        missCount = 0
-
-        let frame = AX.caretFrame(of: element) ?? AX.frame(of: element)
-        guard let frame, frame.height > 0.5 else {
-            // Minimised, scrolled away, or on another space. Hide it, but do
-            // not hold the keyboard hostage if it never comes back.
-            if panel.isVisible { panel.orderOut(nil) }
-            if Date().timeIntervalSince(lastGoodFrameAt) > 2.0 {
-                DebugLog.write("dismiss: no frame for 2s")
-                engine.dismissHold()
-            }
-            return
-        }
-        lastGoodFrameAt = Date()
+        guard !draft.preview, let panel = catchPanel else { return }
+        // Whatever else happens, a held draft always has its panel on screen.
         if !panel.isVisible { panel.orderFrontRegardless() }
+        guard !tracking else { return }
 
-        guard let last = trackedFrame else { trackedFrame = frame; return }
-        // Ignore sub-pixel noise; a jittering overlay is worse than a still one.
-        guard abs(frame.minX - last.minX) > 1.5 || abs(frame.minY - last.minY) > 1.5 else { return }
-        trackedFrame = frame
-        panel.anchor(to: frame, size: CGSize(width: CatchOverlayView.width, height: catchHeight))
+        // Switching apps is checked here, on main, every tick: it must close
+        // the panel at once, not one background round trip later.
+        let front = NSWorkspace.shared.frontmostApplication
+        guard front?.processIdentifier == draft.pid || front?.bundleIdentifier == draft.bundleID else {
+            DebugLog.write("dismiss: app switched")
+            engine.editDraft(); return
+        }
+        guard let element = engine.heldElement else { return }
+
+        tracking = true
+        let settling = Date().timeIntervalSince(shownAt) < 0.5
+        let span = draft.span.trimmingCharacters(in: .whitespacesAndNewlines)
+        let checkText = draft.source != .typed
+        trackQueue.async { [weak self] in
+            let result = OverlayController.track(element: element, span: span, checkText: checkText, settling: settling)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.tracking = false
+                guard let engine = self.engine, let current = engine.held, current.id == draft.id else { return }
+                self.apply(result, settling: settling)
+            }
+        }
+    }
+
+    private nonisolated static func track(element: AXUIElement, span: String, checkText: Bool, settling: Bool) -> TrackResult {
+        // Focus moving to a *different* field is the reliable signal that the
+        // draft has been left behind. Focus going to nil is not, because web
+        // views do that constantly, and Chromium hands out a fresh element
+        // for the same field now and then, so the text is compared as well.
+        if let focused = AX.focusedField(), !CFEqual(focused.element, element) {
+            let sameText = !span.isEmpty && focused.value.contains(span)
+            if !sameText { return .dismiss("focus moved to \(focused.role)", edit: true) }
+        }
+        guard AX.isAlive(element) else { return .dismiss("element gone", edit: true) }
+        if checkText {
+            let current = AX.readValue(element) ?? ""
+            if !span.isEmpty && !current.contains(span) {
+                return .dismiss("text gone, field now \(current.count) chars", edit: false)
+            }
+        }
+        return .keep(frame: AX.caretFrameChecked(of: element))
+    }
+
+    private func apply(_ result: TrackResult, settling: Bool) {
+        guard let engine, let panel = catchPanel else { return }
+        switch result {
+        case .dismiss(let why, let edit):
+            // AX is often still settling in the first half second; one miss
+            // means nothing, a few in a row mean it is really gone.
+            if settling { return }
+            missCount += 1
+            guard missCount >= 4 else { return }
+            DebugLog.write("dismiss: \(why)")
+            if edit { engine.editDraft() } else { engine.dismissHold() }
+        case .keep(let frame):
+            missCount = 0
+            guard let frame, frame.height > 0.5 else { return }
+            lastGoodFrameAt = Date()
+            guard let last = trackedFrame else { trackedFrame = frame; return }
+            // Ignore sub-pixel noise; a jittering overlay is worse than a still one.
+            guard abs(frame.minX - last.minX) > 1.5 || abs(frame.minY - last.minY) > 1.5 else { return }
+            trackedFrame = frame
+            panel.anchor(to: frame, size: CGSize(width: CatchOverlayView.width, height: catchHeight))
+        }
     }
 }

@@ -9,7 +9,10 @@ public enum GeminiConfig {
 
     /// Free-tier shape as published for Flash-Lite. Both are conservative on
     /// purpose: running out mid-demo has to degrade, never error.
-    public static let defaultRequestsPerMinute = 28
+    /// Google's free tier cuts off well before 28 a minute and answers 429,
+    /// which the old default hit in ordinary use. Staying under it keeps the
+    /// context tier answering.
+    public static let defaultRequestsPerMinute = 12
     public static let defaultRequestsPerDay = 480
 
     public static var configFileURL: URL {

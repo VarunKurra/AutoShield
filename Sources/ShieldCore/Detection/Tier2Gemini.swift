@@ -33,8 +33,11 @@ public final class Tier2Gemini: Analyzer, @unchecked Sendable {
             perDay: limits.perDay,
             storeURL: Paths.support.appendingPathComponent("gemini-quota.json"))
         let cfg = URLSessionConfiguration.ephemeral
-        cfg.timeoutIntervalForRequest = 6
-        cfg.timeoutIntervalForResource = 8
+        // Verdicts are computed while the person types, never while they wait
+        // on Return, so a generous timeout costs nothing and a tight one
+        // silently drops the catches only this tier can make.
+        cfg.timeoutIntervalForRequest = 10
+        cfg.timeoutIntervalForResource = 12
         cfg.waitsForConnectivity = false
         self.session = session ?? URLSession(configuration: cfg)
     }
@@ -55,7 +58,18 @@ public final class Tier2Gemini: Analyzer, @unchecked Sendable {
     }
 
     /// Throws only so the cascade can tell "no answer" from "answered clear".
+    /// A timeout or a server hiccup is retried once before giving up.
     public func request(_ text: String, context: [String]) async throws -> Verdict {
+        do {
+            return try await requestOnce(text, context: context)
+        } catch GeminiError.transport(let why) {
+            DebugLog.write("context tier retrying after: \(why)")
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            return try await requestOnce(text, context: context)
+        }
+    }
+
+    private func requestOnce(_ text: String, context: [String]) async throws -> Verdict {
         guard let apiKey else { throw GeminiError.noKey }
         guard limiter.tryAcquire() else { throw GeminiError.quotaExhausted }
 
@@ -169,6 +183,8 @@ public final class Tier2Gemini: Analyzer, @unchecked Sendable {
             "generationConfig": [
                 "temperature": 0.1,
                 "maxOutputTokens": 512,
+                // A judgement, not an essay: thinking only adds latency here.
+                "thinkingConfig": ["thinkingLevel": "minimal"],
                 "responseMimeType": "application/json",
                 "responseSchema": Tier2Gemini.schema,
             ],
@@ -205,11 +221,12 @@ public final class Tier2Gemini: Analyzer, @unchecked Sendable {
               let payload = try? JSONDecoder().decode(Payload.self, from: jsonData)
         else { throw GeminiError.malformed }
 
-        let score = min(max(payload.score, 0), 1)
+        let raw = min(max(payload.score, 0), 1)
+        let score = payload.self_directed_distress ? 0 : raw
         let cats = payload.categories.compactMap(Category.init(rawValue:))
         return Verdict(
             level: Tier0Rules.level(for: score),
-            score: payload.self_directed_distress ? 0 : score,
+            score: score,
             confidence: min(max(payload.confidence, 0), 1),
             tier: .context,
             latencyMs: latencyMs,

@@ -12,6 +12,9 @@ public final class Rephraser: @unchecked Sendable {
         case quotaExhausted
         case transport(String)
         case refused
+        /// The model had no kind version to offer, or answered with a
+        /// refusal instead of a rewrite.
+        case noRewrite
     }
 
     private let apiKey: String?
@@ -38,24 +41,60 @@ public final class Rephraser: @unchecked Sendable {
 
     public var isAvailable: Bool { apiKey != nil }
 
+    /// A rewrite is a message in the person's voice, about as long as theirs.
+    /// A refusal ("I cannot fulfill this request…") is not, and must never
+    /// be typed into their field and sent as if they wrote it.
+    public static func looksLikeRewrite(_ out: String, of original: String) -> Bool {
+        let o = out.lowercased()
+        if o == "none" || o.hasPrefix("none") { return false }
+        let refusals = ["i cannot", "i can't", "i can not", "i'm unable", "i am unable", "i won't", "i will not",
+                        "as an ai", "i am programmed", "i'm programmed", "language model", "i'm sorry, but",
+                        "i am sorry, but", "safety guidelines", "i'm not able", "i am not able", "cannot fulfill",
+                        "can't help with", "cannot help with", "harmful content", "against my"]
+        if refusals.contains(where: { o.contains($0) }) { return false }
+        // Rewrites keep roughly the original's length; essays are refusals.
+        return out.count <= max(original.count * 3, original.count + 80)
+    }
+
     private static let system = """
     You rewrite a message someone is about to send, keeping what they actually \
-    mean and removing what would wound the person reading it.
+    need to say and removing what would wound the person reading it.
 
     Rules:
     - Keep their point. If they are angry, frustrated or disagreeing, the \
-      rewrite still says so. Do not turn a complaint into a compliment.
+      rewrite still says so plainly. Do not turn a complaint into a compliment.
+    - Aim at the situation or the behaviour, never at who the person is. \
+      "you're so annoying, nobody wants you here" becomes something like \
+      "can you give us some space for a bit?", not "your presence isn't wanted".
+    - Nothing that excludes, mocks, threatens, insults or belittles survives, \
+      even politely worded.
+    - No swearing at all, mild words included (damn, hell, crap, ass), and no \
+      acronyms that stand for swearing (wtf, stfu, lmao). Nothing sexual or \
+      explicit. "holy shit that's amazing" becomes "wow that's amazing".
     - Keep their voice: same rough length, same register, same slang level. If \
       they write in lowercase with no punctuation, so do you.
-    - Remove insults, slurs, threats, mockery, and anything aimed at who the \
-      person is rather than what they did.
-    - Never add an apology they did not make. Never add "I feel" therapy \
-      phrasing. Never make it longer or more formal than the original.
+    - Never add an apology they did not make. Never add therapy phrasing. \
+      Never make it longer or more formal than the original.
     - Output only the rewritten message. No quotes, no preamble, no options.
     - If the message is already fine, return it unchanged.
+    - If there is no kind way to say it at all (a death wish, a threat, a \
+      slur with nothing else in it), output exactly NONE and nothing else. \
+      Never explain, refuse, or talk about yourself.
     """
 
+    /// A timeout or a busy server (5xx) is retried once: a person is
+    /// waiting on this with their message held, and Google's free tier
+    /// returns 503 under load more often than it fails for good.
     public func rephrase(_ text: String, context: [String] = []) async throws -> String {
+        do {
+            return try await rephraseOnce(text, context: context)
+        } catch Failure.transport {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            return try await rephraseOnce(text, context: context)
+        }
+    }
+
+    private func rephraseOnce(_ text: String, context: [String]) async throws -> String {
         guard let apiKey else { throw Failure.noKey }
         guard limiter.tryAcquire() else { throw Failure.quotaExhausted }
 
@@ -73,6 +112,7 @@ public final class Rephraser: @unchecked Sendable {
             "generationConfig": [
                 "temperature": 0.4,
                 "maxOutputTokens": 400,
+                "thinkingConfig": ["thinkingLevel": "low"],
                 "responseMimeType": "text/plain",
             ],
             "safetySettings": [
@@ -119,6 +159,7 @@ public final class Rephraser: @unchecked Sendable {
                 out = String(out.dropFirst().dropLast())
             }
             guard !out.isEmpty else { throw Failure.refused }
+            guard Rephraser.looksLikeRewrite(out, of: text) else { throw Failure.noRewrite }
             return out
         } catch let e as Failure {
             throw e

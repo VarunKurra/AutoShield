@@ -128,6 +128,13 @@ final class Windows: NSObject, NSWindowDelegate {
         windows = windows.filter { $0.value !== closing }
         // Closing the window ends the session's authority. Reopening asks again.
         Passcode.shared.lock()
+        // The red button quits AutoShield outright: protection runs only
+        // while the app is open. Explicit, because covers on screen are
+        // windows too and would otherwise keep the app alive.
+        if windows.isEmpty {
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+            return
+        }
         // Back to a menu bar app once nothing is on screen.
         DispatchQueue.main.async {
             if self.windows.isEmpty { NSApp.setActivationPolicy(.accessory) }

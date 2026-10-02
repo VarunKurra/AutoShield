@@ -126,7 +126,94 @@ def expand(templates, label):
             out.append({"text": s, "label": label})
     return out
 
-rows = expand(harmful_templates, "harmful") + expand(ok_templates, "ok")
+# --- Everyday chat ---------------------------------------------------------
+#
+# The public corpora are tweets and Wikipedia talk pages. Neither sounds like
+# a group chat, so without this the model learns that "you" plus anything
+# informal is an attack. These teach it what friends actually say.
+
+ok_chat = [
+    "i'm so proud of you", "you're killing it bro", "you are the best friend ever",
+    "damn you look good today", "what do you think about the essay",
+    "you're crazy good at this", "thank you so much for your help",
+    "can you send me the notes from today", "are you coming to the party tonight",
+    "let me know if you want to come", "you did amazing on that test",
+    "you're literally the funniest person i know", "i miss you so much",
+    "did you finish the homework yet", "you're so talented honestly",
+    "omg you look so cute in that pic", "that's sick dude", "she is a beast at basketball",
+    "fuck yeah we won the game", "holy shit that's amazing", "this homework is killing me",
+    "i could kill for a burger right now", "i'm dying lmao that's hilarious",
+    "bro that was insane", "you're a legend", "you're a genius", "you absolute legend",
+    "dude you're so lucky", "you deserve it so much", "you got this", "good luck tomorrow you'll do great",
+    "happy birthday hope you have the best day", "call me when you get home",
+    "what time are you free", "you want to play later", "can you help me with math",
+    "you're right my bad", "sorry i was late", "i love you guys", "love you bestie",
+    "you're so sweet", "that's so nice of you", "you're the goat", "you're actually so smart",
+    "wanna hang out this weekend", "you have to watch this video", "where are you",
+    "you were so good in the play", "your drawing is so good", "your hair looks great",
+    "this song slaps", "that game was fire", "lmao you're wild", "you're so funny",
+    "damn that's crazy", "shit i forgot my charger", "fuck i missed the bus",
+    "this traffic is ass", "my code is garbage lol", "this bug is so stupid",
+    "that movie was trash honestly", "the weather is disgusting today", "i'm so tired",
+    "ugh mondays", "i hate mondays", "math is the worst", "my phone is dying",
+    "we should get food", "you down for pizza", "i'm proud of how far you've come",
+    "you inspire me", "you're doing great sweetie", "i'm here if you need me",
+    "you can do it", "just text me", "send me the link", "did you see that",
+    "you're up early", "you good?", "you okay?", "how are you doing",
+    "i think you're wrong about this but ok", "i disagree with you on that",
+    "that's not how it works though", "you forgot to add the file",
+    "you have a typo in the second line", "can you fix the slides",
+    "you missed the meeting", "you owe me five bucks lol", "you're so extra lol",
+    "you're such a nerd for that lol", "stop you're making me blush",
+    "shut up that's so cool", "no way you did that", "are you kidding me that's awesome",
+    "that's lowkey hilarious", "lmao i'm dead", "that killed me", "you killed it",
+    "you smashed that presentation", "you crushed it", "go off queen",
+    "slay", "you ate that", "periodt", "no cap you were amazing", "bet see you there",
+]
+
+harmful_chat = [
+    "you're so ugly no one will ever love you", "you are a fat ugly pig",
+    "shut up you stupid bitch", "kill yourself", "nobody likes you just leave",
+    "you're a waste of space", "go jump off a bridge", "everyone hates you",
+    "you're a fucking idiot", "you should just disappear forever",
+    "i hope you get cancer", "ur so dumb its embarrassing",
+    "you will never amount to anything", "you're pathetic and worthless",
+    "stfu loser", "i'm going to beat the shit out of you", "you're a disgusting whore",
+    "nobody would care if you died", "your mom should have aborted you",
+    "you're retarded", "go back to your country", "you look like a pig",
+    "you're a dumb fuck", "die in a fire", "i will kill you", "kys loser",
+    "you are so annoying nobody wants you here", "stupid ass bitch",
+    "you're such a failure your parents must be ashamed", "shut the fuck up",
+    "you're an ugly piece of shit", "fuck you", "go to hell", "i hate you", "you suck",
+    "you're worthless", "no one wants you around", "you're a joke",
+    "everyone is laughing at you", "you have no friends", "go cry about it loser",
+    "you're so stupid it hurts", "you're a freak", "you're disgusting",
+    "you're a loser and everyone knows it", "you smell like trash",
+    "you're the reason everyone left", "nobody invited you", "you're not welcome here",
+    "get out of the group chat", "we all hate you", "you're so fat",
+    "you're ugly as hell", "you're a slut", "you're a creep", "you're such a loser",
+    "nobody cares about you", "no one will miss you", "the world would be better without you",
+    "you should kill yourself", "go die", "just die already", "i hope you die",
+    "watch your back", "i know where you live", "you're dead after school",
+    "i'll make your life hell", "you'll regret this", "i'm going to find you",
+    "imagine being that ugly", "you're a waste of oxygen", "you're so pathetic",
+    "what a loser", "such an idiot", "you're braindead", "you absolute moron",
+    "you dumbass", "idiot", "loser", "moron", "fatass", "you're trash",
+]
+
+def expand_plain(lines, label, tails_for):
+    out = []
+    for line in lines:
+        for tail in tails_for:
+            s = " ".join(f"{line} {tail}".split())
+            out.append({"text": s, "label": label})
+    return out
+
+chat_tails = ["", "lol", "lmao", "fr", "tbh", "honestly", "!", "bro", "dude", "ngl"]
+
+rows = (expand(harmful_templates, "harmful") + expand(ok_templates, "ok")
+        + expand_plain(ok_chat, "ok", chat_tails)
+        + expand_plain(harmful_chat, "harmful", chat_tails))
 random.shuffle(rows)
 
 path = os.path.join(os.path.dirname(__file__), "..",

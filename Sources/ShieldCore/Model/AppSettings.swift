@@ -19,6 +19,7 @@ public final class AppSettings: ObservableObject {
             Key.sensitivity: Sensitivity.balanced.rawValue,
             Key.onboarded: false,
             Key.shareStats: false,
+            Key.liveCatch: true,
         ])
     }
 
@@ -32,6 +33,14 @@ public final class AppSettings: ObservableObject {
         static let sensitivity = "shield.sensitivity"
         static let onboarded = "shield.onboarded"
         static let shareStats = "shield.shareStats"
+        static let liveCatch = "shield.liveCatch"
+    }
+
+    /// Catch cruel text as it is typed, in any app, not only when Return is
+    /// pressed. Return is always guarded either way.
+    public var liveCatchEnabled: Bool {
+        get { defaults.bool(forKey: Key.liveCatch) }
+        set { set(Key.liveCatch, newValue) }
     }
 
     public var sendShieldEnabled: Bool {

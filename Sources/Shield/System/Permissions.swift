@@ -14,6 +14,23 @@ final class Permissions: ObservableObject {
 
     var allGranted: Bool { accessibility && inputMonitoring }
 
+    /// Reading text fields and the messages around them. Accessibility alone
+    /// is enough, which is why incoming protection can work when outgoing
+    /// cannot.
+    var canRead: Bool { accessibility }
+
+    /// Swallowing Return before the app underneath sees it. Needs the event
+    /// tap, and so needs Input Monitoring as well.
+    var canCatchSends: Bool { accessibility && inputMonitoring }
+
+    /// What is missing, in the order it matters.
+    var missing: String? {
+        if !accessibility && !inputMonitoring { return "Accessibility and Input Monitoring" }
+        if !accessibility { return "Accessibility" }
+        if !inputMonitoring { return "Input Monitoring" }
+        return nil
+    }
+
     /// Set by the engine. A running event tap is proof the permission is
     /// granted, whatever the TCC lookup says.
     var tapIsLive = false {

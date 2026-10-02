@@ -28,9 +28,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NotificationCenter.default.addObserver(
             forName: .shieldSettingsChanged, object: nil, queue: .main) { [weak self] _ in
-                guard let self else { return }
-                if AppSettings.shared.inboxShieldEnabled { self.inbox?.start() }
-                else { self.inbox?.stop() }
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if AppSettings.shared.inboxShieldEnabled { self.inbox?.start() }
+                    else { self.inbox?.stop() }
+                }
             }
 
         // `open Shield.app --args --monitor` goes straight to the instrument
@@ -50,6 +52,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         Windows.shared.show(.main)
         return true
+    }
+
+    /// The red button quits. AutoShield protects only while it is open;
+    /// closing the window stops everything rather than leaving it running
+    /// unseen in the menu bar.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
     }
 
     func applicationWillTerminate(_ notification: Notification) {

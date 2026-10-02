@@ -21,6 +21,7 @@ struct RootView: View {
         let straightToHome = AppSettings.shared.hasOnboarded
             && !AppSettings.alwaysShowOnboarding
         _screen = State(initialValue: straightToHome ? .home : .welcome)
+        if straightToHome { ProtectionGate.onboarded = true }
     }
 
     var body: some View {
@@ -37,6 +38,8 @@ struct RootView: View {
             case .passcode:
                 PasscodeSetupScreen {
                     AppSettings.shared.hasOnboarded = true
+                    // Setup is done: protection may start now, not before.
+                    ProtectionGate.onboarded = true
                     // Setting a code does not leave the session authorised, or
                     // the first thing it guards could be switched off without
                     // ever being asked for.
@@ -58,7 +61,7 @@ struct RootView: View {
     /// The border tracks the thing it signifies: on when AutoShield is
     /// actually watching, off otherwise.
     private var borderLive: Bool {
-        screen == .home && settings.sendShieldEnabled && Permissions.shared.allGranted
+        screen == .home && settings.sendShieldEnabled && Permissions.shared.canCatchSends
     }
 
     private func go(_ next: Screen) {
@@ -176,7 +179,7 @@ private struct PermissionsScreen: View {
 
                 PermissionRow(
                     title: "Input Monitoring",
-                    detail: "Catches Return before it sends",
+                    detail: "Catches cruel text as it is typed or sent",
                     symbol: "keyboard.fill",
                     granted: permissions.inputMonitoring,
                     action: { permissions.requestInputMonitoring() })

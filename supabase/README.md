@@ -9,7 +9,7 @@ message, because nothing but integers is ever sent.
 brew install supabase/tap/supabase     # not installed on this machine yet
 supabase login
 supabase init
-supabase link --project-ref <your-project-ref>
+supabase link --project-ref mpsywvyzaefeovcpwqky
 supabase db push
 ```
 

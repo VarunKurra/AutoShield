@@ -1,18 +1,21 @@
 import Foundation
 
-/// Instrumentation for the catch path, written to a file rather than stdout,
-/// because Shield is a GUI process with nowhere to print. Off unless
-/// SHIELD_DEBUG is set in the environment.
+/// A record of what the catch path did, so a bug report can be traced.
+///
+/// Always on, and never contains message text: lines carry lengths, scores,
+/// app names and decisions only. Kept in ~/Library/Logs/AutoShield, rolled
+/// over at 512 KB so it never grows. SHIELD_DEBUG_FILE points it elsewhere.
 public enum DebugLog {
-    /// Environment variable, or the presence of a marker file. The marker is
-    /// how you turn logging on for a normally launched .app, which inherits no
-    /// environment from a shell.
-    public static let enabled =
-        ProcessInfo.processInfo.environment["SHIELD_DEBUG"] != nil
-        || FileManager.default.fileExists(atPath: "/tmp/shield-debug-on")
+    public static let enabled = true
 
-    private static let url = URL(fileURLWithPath:
-        ProcessInfo.processInfo.environment["SHIELD_DEBUG_FILE"] ?? "/tmp/shield-debug.log")
+    private static let url: URL = {
+        if let p = ProcessInfo.processInfo.environment["SHIELD_DEBUG_FILE"] { return URL(fileURLWithPath: p) }
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/AutoShield", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("shield.log")
+    }()
+    private static let limit: UInt64 = 512 * 1024
     private static let lock = NSLock()
 
     private static let stamp: DateFormatter = {
@@ -36,6 +39,11 @@ public enum DebugLog {
         guard enabled else { return }
         let msg = "\(stamp.string(from: Date()))  \(line())\n"
         lock.lock(); defer { lock.unlock() }
+        if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? UInt64, size > limit {
+            let old = url.deletingPathExtension().appendingPathExtension("1.log")
+            try? FileManager.default.removeItem(at: old)
+            try? FileManager.default.moveItem(at: url, to: old)
+        }
         if let h = try? FileHandle(forWritingTo: url) {
             h.seekToEndOfFile(); h.write(Data(msg.utf8)); try? h.close()
         } else {

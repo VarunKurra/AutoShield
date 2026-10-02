@@ -13,145 +13,170 @@ macOS 15 · Swift 6.1 · no third-party packages
 
 ---
 
-## What it is
+A macOS app that catches cruel messages before they send — in every application
+on the machine. Not in its own chat window. Discord, Instagram in Chrome,
+Messages, Gmail, Slack, any text field on the system.
 
-Most filters read words. Most cruelty uses none.
+This is a local prototype. No App Store, no notarization, no distribution.
 
-"Nobody asked." A backhanded compliment. Three accounts repeating the same line
-at one person in ninety seconds. Someone conspicuously talked around. Zero
-flagged words, all of them land.
+```
+Tools/build.sh          build Shield.app
+Tools/train.sh          fetch the corpus and train the Tier 1 model
+Tools/check.sh          run the test suite
+Tools/check.sh --context  also replay the fixtures through Gemini
+open Shield.app
+open Shield.app --args --monitor    open straight into the instrument panel
+```
 
-AutoShield works in both directions:
+## What it does
 
-**Outgoing.** It reads the text field you are typing in and keeps a verdict
-warm. When you press Return on something cruel, it swallows the keystroke — the
-message does not send — and a panel appears anchored to your caret with two
-ways out: rewrite it with AI and send, or go back and edit it yourself.
+**Outgoing.** Shield reads what you are writing, from the focused field
+through the Accessibility API, or from your keystrokes in apps that draw their
+own text and expose nothing (Google Docs, canvas editors, games). It keeps a
+verdict warm as you type and stops cruel text two ways:
 
-**Incoming.** It floats frosted glass over a cruel message that was sent *to*
-you, labelled with how hard it lands, and peels it away only if you ask.
+- **While typing**, in any app: once the offending word is finished, the
+  keyboard pauses and a non-activating panel appears beside the caret. Nothing
+  more can be typed onto the message until you choose.
+- **On Return**: a system-wide `CGEventTap` swallows Return on a draft over the
+  threshold, every time, so the message does not send.
 
-Nothing is reported to anyone. No parent dashboard, no school portal, no
-account. A supervisor can set a passcode so protection cannot be switched off
-by the person it is protecting, and that is the entire mechanism.
+The panel has three ways out, each one keystroke:
 
-## Why it can do this
+- `return` rewrites it with Gemini (and sends it, if Return is what triggered
+  the pause), keeping your point and your voice and dropping the cruelty
+- `⌘⌫` removes the offending sentences
+- `esc` puts you back in the field to fix it yourself
 
-Two macOS capabilities that a sandboxed mobile app can never have.
+There is no "send it anyway" button, because one sitting next to the others
+turns the pause into a dare. Escape is not a pass either: the same words are
+held again if you press Return on them. Nothing is ever sent that you have not
+seen: if the rewrite fails or quota is gone, the panel says so and your
+original text is untouched.
 
-**The Accessibility API** reads the value of the focused text field in any
-other application and subscribes to changes on it. The same mechanism a screen
-reader uses. AutoShield sees what you type in Discord or Chrome without those
-apps cooperating.
+**Incoming.** Frosted glass floated over a cruel message that was sent *to*
+you, tracked to its rect and peeled away only if you ask. It works in any app:
+a background scan reads the visible text of the frontmost window continuously,
+judges each run of text alone and joined with its neighbours (so a message
+split by a link or bold text is still read whole), and moves covers with the
+text as you scroll.
 
-**CGEventTap** intercepts keyboard events system-wide before they reach the
-target app and can swallow them. When you hit Return on a harmful draft,
-AutoShield eats the keypress and the message does not send. That is prevention,
-not a warning after the fact.
+An honest limit: macOS gives no way to intercept another app's rendering, so
+text exists on screen for the moment between paint and cover. Shield closes
+that gap as far as a native app can (a continuous off-main-thread sweep, a
+synchronous local score, no network on the hot path) but it cannot make it
+zero. Only code running inside the app itself could.
 
-Both permissions are granted by hand in System Settings. Neither can be
-requested silently.
+**Crisis surface.** When language turns toward self-harm, Shield shows 988 and
+the Crisis Text Line beside the draft. It offers and never acts: nothing is
+sent, reported or escalated, nothing is blocked, and a message about your own
+pain is never held.
 
-## Detection: a three-tier cascade
+**Severity.** Every caught message is scored and coloured on a warm ramp:
+amber (Sharp), orange (Harsh), red (Cruel). The word sits next to the colour,
+so the meaning never depends on seeing hue.
 
-Running a language model on every keystroke is impossible, and not only for
-cost. One interface, three tiers, swappable without touching UI code:
+**Shield Monitor.** Which tier resolved each draft, its latency, the context
+tier's rationale when it fired, live tier distribution, remaining daily quota,
+and a rehearsal tab that replays the fixtures through the real pipeline.
+
+## The cascade
+
+One interface, three tiers, swappable without touching UI code:
 
 ```swift
 func analyze(_ text: String, context: [String]) async -> Verdict
 ```
 
-| Tier | What it is | Cost | Latency (measured) |
-|------|-----------|------|--------------------|
-| **0** | Normalised pattern rules with evasion handling | free, local | **0.36 ms** median |
-| **1** | Core ML text classifier via `NLModel` | free, local | **0.06 ms** median |
-| **2** | Gemini, reading the surrounding conversation | free tier | 400–900 ms |
+| Tier | What | Cost | Typical latency |
+|------|------|------|-----------------|
+| 0 | Whole-word patterns over normalised text, with evasion handling | free, local | < 1 ms |
+| 1 | Fine-tuned BERT transformer on the Neural Engine (Core ML) | free, local | ~2 ms |
+| 2 | Gemini with the surrounding conversation | free tier, network | 400–2000 ms |
 
-Tier 0 ends the obvious in both directions. Tier 1 takes most of the rest.
-Tier 2 is reached only when the cheap tiers are unconvinced **or** when tier 0
-reports that the surface looks innocent while the shape does not — which is the
-only way a message with no flagged words ever gets read in context.
+**Tier 0** decides almost everything. Text is normalised first: leetspeak,
+unicode lookalikes, zero-width characters, stretched letters ("looooser"),
+masked words ("f*ck", "n****r") and spelled-out letters ("k y s") all fold
+back onto plain words. Matching is strictly on whole words, so "if you" never
+reads as "f you" and "pinky swear" never reads as "kys". Insults are scored by
+who they land on: "you're a loser" is aimed, "my code is garbage" is not,
+"i'm such an idiot" is the writer, and "you're not stupid" is negated. Explicit
+patterns cover death wishes, threats, harassment, exclusion and slurs; friendly
+markers ("jk", "love you", a heart) soften an insult but never a threat.
 
-Verdicts are computed continuously while typing and cached by content hash, so
-the Return handler is a dictionary lookup rather than an inference call. The
-event tap callback reads one lock-free atomic and compares a key code.
+**Swearing and explicit language** are judged by the word, not by aim, because
+Shield is meant for school and family machines:
 
-### Things tier 0 handles
+| | Light | Balanced | Attentive |
+|---|---|---|---|
+| Explicit or sexual language | held | held | held |
+| Swearing (f-word, s-word, "bitch"…) | held | held | held |
+| Mild swearing ("damn", "hell", "crap", "ass") | passes | held | held |
 
-Leetspeak, unicode lookalikes, zero-width characters, inserted separators,
-stretched letters, and — importantly — **aim**. A harsh word sharing a sentence
-with "you" is not the same as a harsh word pointed at you:
+Acronyms count exactly as the words they stand for ("wtf", "stfu", "ffs",
+"lmfao" are the f-word; "wth" is "hell"; "lmao" is "ass"). Quoting, a "jk",
+or the context tier can never talk a banned word down. Someone describing
+their own pain is the one exception: it is never held, only offered resources.
 
-```
-0.90   you are a worthless pathetic loser
-0.63   you are an idiot
-0.18   you should see this stupid bug it broke everything
-0.18   this homework is so dumb and i hate it
-0.12   (unaimed profanity — most swearing is punctuation)
-```
+**Tier 1** is `unitary/toxic-bert` (BERT-base) fine-tuned by
+`Tools/finetune_tier1.py` on one question, "does this attack someone?", then
+converted by `Tools/convert_tier1.py` to an 8-bit Core ML model (110 MB) with a
+Swift WordPiece tokenizer verified token-for-token against Hugging Face's. It
+catches cruelty no rule names ("you're a stain on this school"), but on its
+own it cannot tell teasing between friends from the real thing, so it never
+holds a message by itself: what only the transformer flags goes to tier 2,
+and Return waits up to 2.5 s for the answer. Without tier 2 (offline, no key),
+the transformer holds on its own at Attentive only.
 
-### Tier 1
+**Tier 2** reads the conversation. It is reached when the transformer flags
+something the rules missed, when the local tiers are unsure, or when the text
+has the shape of veiled cruelty (polite threats, freeze-outs, coded in-jokes).
 
-A Core ML text classifier trained on a public toxicity corpus *plus* about
-1,200 hand-written rows covering relational aggression, blunt-but-fine
-disagreement, and the writer's own pain. **95.1% held out.** The curated half
-matters: a corpus of profanity teaches a model to spot swearing, which tier 0
-already does for free.
+Verdicts are computed continuously while typing and cached by content hash.
+The event tap reads one atomic flag; if Return arrives before the watcher has
+scored the latest keystrokes, the tap scores them itself, locally, rather than
+let the message go on a stale verdict.
 
-`Tools/train.sh` fetches the corpus and rebuilds the model.
-
-## Crisis handling
-
-Detection that reads for cruelty also sees distress, so that is handled
-deliberately rather than ignored.
-
-**A message about your own pain is never held.** This is asserted in the test
-suite across every sensitivity level, for seven phrasings, plus the inverse:
-the same vocabulary aimed outward still is. Send Shield is for cruelty aimed at
-someone else, never for silencing someone in distress.
-
-When language turns toward self-harm, AutoShield surfaces 988, the Crisis Text
-Line and The Trevor Project. It offers and never acts: nothing is sent,
-reported or escalated, and nothing is blocked.
-
-There is a **Get help** page for the other case — the person who is humiliated
-and panicking at 11pm and is not in acute danger. Crisis lines at the top, then
-exporting a timestamped record (schools and platforms rarely act on
-screenshots), direct links to each platform's buried report form, and three
-scripts for starting the conversation with a parent, a counsellor or a friend.
-
-## Build and run
+### Training tier 1
 
 ```bash
-Tools/build.sh          # build AutoShield.app
-Tools/train.sh          # fetch the corpus and train the tier 1 model
-Tools/check.sh          # run the test suite
-Tools/check.sh --context  # also replay fixtures through Gemini
-Tools/run.sh            # run it
+python3 -m venv --system-site-packages .venv-model
+.venv-model/bin/pip install coremltools          # torch and transformers too
+curl -sL -o data/jigsaw_train.csv \
+  https://huggingface.co/datasets/thesofakillers/jigsaw-toxic-comment-classification-challenge/resolve/main/train.csv
+taskpolicy -b .venv-model/bin/python Tools/finetune_tier1.py   # ~1.5 h on an M3, at background priority
+.venv-model/bin/python Tools/convert_tier1.py                  # Core ML + parity file
+Tools/build.sh && Tools/check.sh
 ```
 
-### Permissions
+Training data: Jigsaw comments labelled insult, threat, identity hate or
+severe toxicity are harmful; clean comments and swearing that attacks no one
+are not (swearing is handled by the word lists, not the model). Generated
+group-chat lines add how people actually talk in both directions. The older
+bag-of-words model (`Tools/train.sh`) remains as a fallback when the
+transformer is not bundled.
 
-Two, granted by hand. The first-run flow explains both and shows their state
-live.
+## Setup
 
-- **Accessibility** — read the focused text field in other apps
-- **Input Monitoring** — see Return before the app underneath does
+Two permissions, granted by hand in System Settings. The app's first-launch
+screen explains both and shows their state live.
 
-> **Note on ad-hoc signing.** Without an Apple developer certificate, macOS
-> accepts an Accessibility grant but silently refuses to persist an Input
-> Monitoring one, and every rebuild changes the binary hash and invalidates
-> whatever was granted. Until the app has a real signing identity, run it with
-> `Tools/run.sh`: macOS attributes permissions to the responsible process, so a
-> binary started from a terminal inherits that terminal's grants and is fully
-> functional.
+- **Accessibility** — read the focused text field in other apps.
+- **Input Monitoring** — see Return before the app underneath does, and read
+  keystrokes in apps whose text Accessibility cannot see. Typed text is kept
+  in memory only (the last few hundred characters of the frontmost app), never
+  written to disk, and dropped on app switch or after two idle minutes.
 
-### Configuration
+After granting either one, quit Shield and open it again; macOS only hands a
+new permission to a fresh launch.
 
-No key is required — AutoShield runs local-only without one and says so.
-Nothing is ever committed; keys live outside the repo:
+### The Gemini key
+
+Never committed. Shield reads it from the environment or a local file:
 
 ```bash
+export GEMINI_API_KEY=...
+# or
 mkdir -p ~/.config/shield && cat > ~/.config/shield/config.json <<'EOF'
 {
   "geminiAPIKey": "...",
@@ -163,97 +188,60 @@ EOF
 chmod 600 ~/.config/shield/config.json
 ```
 
-The model name is a single constant, `GeminiConfig.defaultModel`.
+Without a key Shield runs local-only and says so in the monitor. The model name
+lives in one constant, `GeminiConfig.defaultModel`.
+
+## Supabase
+
+Off by default. When switched on in Settings, Shield upserts one row per
+install per day containing counts and nothing else: caught, rewritten,
+dropped, sent anyway, covered, per-tier totals, and the sensitivity in force.
+No message text, no rewrites, no app names, no account.
+
+Schema, policies and setup are in [`supabase/`](supabase/). Row level security
+assumes the publishable key is public: anon may insert and update recent rows
+and cannot read anything back.
 
 ## What leaves this Mac
 
-Tiers 0 and 1 run entirely locally. **Tier 2 sends the draft and the
-surrounding conversation to Google's Gemini API** — the only thing that ever
-leaves the machine — and Settings turns it off for local-only operation.
+Tiers 0 and 1 run entirely locally. Tier 2 sends the draft and the surrounding
+conversation to Google's Gemini API — the only thing that ever leaves the
+machine — and Settings turns it off for local-only operation. Counts are kept
+on disk for the monitor; message text never is. Shield reports to nobody: no
+parent view, no school view, no server, no account.
 
-Optional anonymous telemetry, **off by default**, writes counts to Supabase:
-one row per install per day. No message text, no account. Schema and row-level
-security are in [`supabase/`](supabase/); anon can insert and update recent
-rows and has no select policy at all.
+## Build notes
 
-Passcodes are stored as a salted SHA-256 digest, never as digits — locally and,
-if telemetry is on, in Supabase too. That stops a switch being flipped; it is
-not protection against someone with the machine and time, and the app says so
-rather than implying otherwise.
+Built with `swiftc` directly rather than SwiftPM. The Command Line Tools on
+this machine ship a stale duplicate `SwiftBridging` module map and a
+`PackageDescription` older than the driver, which breaks every framework import
+and every manifest link. `Tools/fix-toolchain.sh` mirrors the toolchain's
+include tree into `.toolchain/`, drops the duplicate there and points `swiftc`
+at the mirror with `-resource-dir`. No system files are touched, and the script
+is a no-op on a healthy install.
 
-## Tests
+Swift 6.1 toolchain, language mode 5. No third-party packages: AppKit and
+Core Animation cover the two hero animations, and hand-written `AXUIElement`
+calls are smaller than a wrapper would be.
 
-```
-94/94 checks passed
-rules tier:     0.360 ms median, 1.184 ms p95
-on-device tier: 0.057 ms median, 0.117 ms p95
-```
+Type is Source Serif 4 for anything that speaks and Geist for anything that
+labels, with GeistMono in the Monitor only. Both are bundled.
 
-`Tools/check.sh` covers normalisation and evasion, the rules tier, the
-never-hold-someone's-own-pain invariant, the crisis router, sensitivity
-ordering, quota and offline fallback, caching, latency, and a fixtures file of
-cases a keyword filter finds nothing in.
-
-Latency is reported as median and p95 rather than a mean, because a mean over
-wall clock is hostage to one descheduled iteration and fails whenever the
-machine is busy.
-
-## Layout
-
-```
-Sources/
-  ShieldCore/        detection, settings, telemetry, design system
-    Detection/       normaliser, lexicon, tiers 0-2, cascade, rephraser
-    Design/          palette, type scale, components
-    Model/           settings, telemetry, passcode, fixtures, sync
-  Shield/            the app
-    System/          Accessibility bridge, event tap, permissions, feedback
-    Features/        engine, inbox shield, events
-    UI/              shell, pages, overlays, passcode
-  ShieldTrainer/     trains the tier 1 model
-  ShieldCheck/       the test suite
-Tools/               build, train, check, run, asset generation
-supabase/            schema and row-level security
-```
-
-### Build notes
-
-Built with `swiftc` directly rather than SwiftPM. The Command Line Tools ship a
-stale duplicate `SwiftBridging` module map and a `PackageDescription` older than
-the driver, which breaks every framework import and every manifest link.
-`Tools/fix-toolchain.sh` mirrors the toolchain's include tree into
-`.toolchain/`, drops the duplicate there and points `swiftc` at the mirror with
-`-resource-dir`. No system files are touched, and it is a no-op on a healthy
-install.
-
-No third-party packages. AppKit and Core Animation cover the animations, and
-hand-written `AXUIElement` calls are smaller than a wrapper would be.
+### Chrome and Electron
 
 Blink-based apps build no accessibility tree until a client asks for one, which
-makes every web text field invisible. AutoShield sets `AXManualAccessibility`
-on each app once, the same thing a screen reader does. Without it, Discord,
+makes every web text field invisible. Shield sets `AXManualAccessibility` on
+each app once, the same thing a screen reader does. Without it, Discord,
 Instagram and Gmail are simply not there.
 
 ### Debugging
 
-```bash
-SHIELD_DEBUG=1 Tools/run.sh      # or: touch /tmp/shield-debug-on
-```
+`SHIELD_DEBUG=1 ./Shield.app/Contents/MacOS/Shield` writes the catch path to
+`/tmp/shield-debug.log`: focus changes, holds, panel geometry, dismissals,
+rewrites and stats syncs. Running it from a terminal that already has
+Accessibility and Input Monitoring is also the quickest way to test without
+re-granting permissions.
 
-Writes the catch path to `/tmp/shield-debug.log`: focus changes, holds, panel
-geometry, dismissals, rewrites and syncs.
-
-## Limits, stated plainly
-
-- **Incoming protection covers, it does not pre-empt.** macOS gives no way to
-  intercept another app's rendering, so text is painted before AutoShield can
-  know it exists. The gap is closed as far as a native app can (a 120 ms sweep,
-  a synchronous local score, no network on the hot path) but it is not zero.
-  Only code running inside the app itself could do better.
-- **Implicit cruelty is hard and this will be wrong sometimes,** in both
-  directions. Every action it takes is reversible and costs one keystroke.
-- This is a local prototype. No App Store, no notarization, no distribution.
-
-## Licence
-
-MIT. See [LICENSE](LICENSE).
+The app is signed ad-hoc with a stable identifier so permission grants survive
+rebuilds where macOS allows it. If a rebuild makes Shield stop catching,
+remove it from both System Settings lists and add it back.

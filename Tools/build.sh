@@ -20,7 +20,7 @@ fi
 
 BUILD="$ROOT/build"
 CACHE="$BUILD/modulecache"
-APP="$ROOT/Shield.app"
+APP="$ROOT/AutoShield.app"
 CONFIG="${1:-release}"
 
 if [ "$CONFIG" = "debug" ]; then
@@ -56,7 +56,7 @@ swiftc "${COMMON[@]}" \
   -module-name Shield \
   -I "$BUILD" -L "$BUILD" -lShieldCore \
   -Xlinker -rpath -Xlinker "@executable_path/../Frameworks" \
-  -o "$BUILD/Shield" \
+  -o "$BUILD/AutoShield" \
   $APP_SRC
 
 # ---- Command line tools ----------------------------------------------------
@@ -78,21 +78,44 @@ done
 say "assembling Shield.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
-cp "$BUILD/Shield" "$APP/Contents/MacOS/Shield"
+cp "$BUILD/AutoShield" "$APP/Contents/MacOS/AutoShield"
 cp "$BUILD/libShieldCore.dylib" "$APP/Contents/Frameworks/"
 cp "$ROOT/Sources/ShieldCore/Resources/"* "$APP/Contents/Resources/" 2>/dev/null || true
 if [ -d "$ROOT/build/ShieldTier1.mlmodelc" ]; then
   cp -R "$ROOT/build/ShieldTier1.mlmodelc" "$APP/Contents/Resources/"
 fi
+# The transformer (Tools/finetune_tier1.py, then Tools/convert_tier1.py).
+# Tier 1 prefers it when present and falls back to the model above.
+if [ -d "$ROOT/build/ShieldTier1T.mlmodelc" ] && [ -f "$ROOT/build/ShieldTier1T.vocab.txt" ]; then
+  cp -R "$ROOT/build/ShieldTier1T.mlmodelc" "$APP/Contents/Resources/"
+  cp "$ROOT/build/ShieldTier1T.vocab.txt" "$APP/Contents/Resources/"
+fi
 cp "$ROOT/Tools/Info.plist" "$APP/Contents/Info.plist"
 if [ -f "$ROOT/Tools/Shield.icns" ]; then
-  cp "$ROOT/Tools/Shield.icns" "$APP/Contents/Resources/Shield.icns"
+  cp "$ROOT/Tools/Shield.icns" "$APP/Contents/Resources/AutoShield.icns"
 fi
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
-# Ad-hoc signature with a stable identifier, so macOS keeps the permission
-# grants attached to the same app between rebuilds where it can.
-codesign --force --sign - --identifier com.shield.prototype \
-  --timestamp=none "$APP" >/dev/null 2>&1 || say "codesign skipped"
+# Sign with a real identity if one is in the keychain, and fall back to
+# ad-hoc if not.
+#
+# This matters more than it looks. macOS pins an Accessibility grant to the
+# binary's hash, which ad-hoc signing satisfies, but it silently refuses to
+# record an Input Monitoring grant for an app with no certificate: the toggle
+# flips, nothing is written, and neither the user nor the app is told. A
+# self-signed certificate is enough to fix that, and it also means grants
+# survive a rebuild, because the identity no longer changes with the hash.
+IDENTITY="${SHIELD_SIGN_IDENTITY:-AutoShield Local Signing}"
+if security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
+  codesign --force --deep --sign "$IDENTITY" --identifier com.shield.prototype \
+    --timestamp=none "$APP" >/dev/null 2>&1 \
+    && say "signed as $IDENTITY" \
+    || { codesign --force --sign - --identifier com.shield.prototype "$APP" >/dev/null 2>&1
+         say "signing failed, fell back to ad-hoc"; }
+else
+  codesign --force --sign - --identifier com.shield.prototype \
+    --timestamp=none "$APP" >/dev/null 2>&1 || say "codesign skipped"
+  say "no signing certificate; ad-hoc (Input Monitoring will not stick)"
+fi
 
 say "built $APP"

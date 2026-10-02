@@ -76,6 +76,9 @@ print("\nShield Tier 1 trainer")
 var texts: [String] = []
 var labels: [String] = []
 
+// Davidson et al. labels any tweet with a swear word "offensive", so training
+// on that class teaches the model that swearing is cruelty and that "you"
+// plus slang is an attack. Only its hate-speech and neutral classes are used.
 if FileManager.default.fileExists(atPath: corpusURL.path),
    let raw = try? String(contentsOf: corpusURL, encoding: .utf8) {
     let rows = parseCSV(raw)
@@ -83,25 +86,40 @@ if FileManager.default.fileExists(atPath: corpusURL.path),
     let classIdx = header.firstIndex(of: "class") ?? 5
     let tweetIdx = header.firstIndex(of: "tweet") ?? 6
 
-    var harmful: [String] = []
-    var ok: [String] = []
+    var harmful = 0, ok = 0
     for row in rows.dropFirst() where row.count > max(classIdx, tweetIdx) {
         let text = clean(row[tweetIdx])
         guard text.split(separator: " ").count >= 3, text.count <= 300 else { continue }
         switch row[classIdx] {
-        case "0", "1": harmful.append(text)   // hate speech, offensive language
-        case "2": ok.append(text)             // neither
+        case "0": texts.append(text); labels.append("harmful"); harmful += 1
+        case "2": texts.append(text); labels.append("ok"); ok += 1
         default: break
         }
     }
-    // The corpus is ~77% offensive; left alone the model simply votes harmful.
-    harmful.shuffle(); ok.shuffle()
-    let n = min(harmful.count, max(ok.count * 2, 2000))
-    texts += harmful.prefix(n); labels += Array(repeating: "harmful", count: min(n, harmful.count))
-    texts += ok; labels += Array(repeating: "ok", count: ok.count)
-    log("corpus: \(min(n, harmful.count)) harmful, \(ok.count) ok")
+    log("davidson: \(harmful) hate, \(ok) neutral (offensive class skipped)")
 } else {
-    log("no corpus at data/labeled_data.csv — training on curated rows only")
+    log("no corpus at data/labeled_data.csv")
+}
+
+// Wikipedia talk-page comments labelled for personal attacks and toxicity.
+// The labels are about what a comment does to a person, not its vocabulary.
+let wikiURL = dataDir.appendingPathComponent("wiki_toxic_balanced.csv")
+if let raw = try? String(contentsOf: wikiURL, encoding: .utf8) {
+    let rows = parseCSV(raw)
+    let header = rows.first ?? []
+    let textIdx = header.firstIndex(of: "comment_text") ?? 1
+    let labelIdx = header.firstIndex(of: "label") ?? 2
+    var harmful = 0, ok = 0
+    for row in rows.dropFirst() where row.count > max(textIdx, labelIdx) {
+        let text = clean(row[textIdx])
+        let words = text.split(separator: " ").count
+        guard words >= 2, text.count <= 320 else { continue }
+        if row[labelIdx] == "1" { texts.append(text); labels.append("harmful"); harmful += 1 }
+        else { texts.append(text); labels.append("ok"); ok += 1 }
+    }
+    log("wiki toxic: \(harmful) toxic, \(ok) clean")
+} else {
+    log("no corpus at data/wiki_toxic_balanced.csv")
 }
 
 // MARK: - Curated rows
@@ -115,7 +133,7 @@ let augURL = root.appendingPathComponent("Sources/ShieldCore/Resources/train-aug
 if let data = try? Data(contentsOf: augURL),
    let aug = try? JSONDecoder().decode(Augment.self, from: data) {
     // Repeated so a thousand curated rows are not drowned by ten thousand tweets.
-    let repeats = texts.isEmpty ? 1 : 6
+    let repeats = texts.isEmpty ? 1 : 4
     for _ in 0..<repeats {
         for r in aug.rows {
             texts.append(Normalizer.normalize(r.text).plain)
@@ -175,6 +193,10 @@ log("wrote \(dest.path)")
 // MARK: - A quick look at what it learned
 
 let probes = [
+    "i'm so proud of you",
+    "what do you think about the essay",
+    "fuck yeah we won",
+    "you're such a clown, everyone saw it",
     "you are a worthless pathetic loser",
     "nobody asked",
     "this is really good for someone like you",
