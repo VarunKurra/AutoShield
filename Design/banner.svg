@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-label="AutoShield — catches a cruel message before it sends">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B3D91"/>
+      <stop offset="0.55" stop-color="#1565D8"/>
+      <stop offset="1" stop-color="#3B9BFF"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#DCEBFF"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.82" cy="0.2" r="0.6">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#FFFFFF" stroke-opacity="0.06" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1280" height="400" rx="24" fill="url(#bg)"/>
+  <rect width="1280" height="400" rx="24" fill="url(#grid)"/>
+  <rect width="1280" height="400" rx="24" fill="url(#glow)"/>
+
+  <!-- Shield mark -->
+  <g transform="translate(110 92)">
+    <path d="M108 0 L208 38 V112 C208 172 166 204 108 224 C50 204 8 172 8 112 V38 Z"
+          fill="url(#shield)"/>
+    <path d="M108 22 L188 52 V112 C188 160 156 186 108 202 Z" fill="#1565D8" fill-opacity="0.14"/>
+    <path d="M66 112 L96 142 L152 84" fill="none" stroke="#1565D8" stroke-width="18"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif" fill="#FFFFFF">
+    <text x="384" y="176" font-size="88" font-weight="800" letter-spacing="-2">AutoShield</text>
+    <text x="388" y="232" font-size="30" font-weight="500" fill-opacity="0.92">Catches a cruel message before it sends.</text>
+    <text x="388" y="272" font-size="30" font-weight="500" fill-opacity="0.92">Covers one sent to you. In every app on your Mac.</text>
+
+    <g font-size="18" font-weight="600">
+      <rect x="388" y="306" width="138" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.16"/>
+      <text x="457" y="331" text-anchor="middle">Send Shield</text>
+      <rect x="538" y="306" width="148" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.16"/>
+      <text x="612" y="331" text-anchor="middle">Inbox Shield</text>
+      <rect x="698" y="306" width="148" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.16"/>
+      <text x="772" y="331" text-anchor="middle">On-device AI</text>
+      <rect x="858" y="306" width="128" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.16"/>
+      <text x="922" y="331" text-anchor="middle">No tracking</text>
+    </g>
+  </g>
+</svg>
